@@ -18,9 +18,11 @@ Known upstream defects, found while importing:
   Two declare 6 bytes and list 4, so QCBOR's own test reads 2 bytes past
   its array. One declares 2 and lists 4. The fixture keeps what QCBOR's test
   actually reads: the listed bytes, cut to the declared length when that is
-  shorter.
+  shorter. Reported as
+  [laurencelundblade/QCBOR#412](https://github.com/laurencelundblade/QCBOR/issues/412).
 - **cose-wg/Examples:** in `x509-examples/signed-01.json` and `signed-02.json`,
   the `cbor_diag` shows the `kid` header as a byte string (`h'416C…'`), while
   the `cbor` hex encodes it as the text string `"Alice Lovelace"`. The hex is
   what was signed, so zucbor's notation follows it. COSE requires a byte
-  string there, so it is the hex that is wrong.
+  string there, so it is the hex that is wrong. Reported as
+  [cose-wg/Examples#109](https://github.com/cose-wg/Examples/issues/109).

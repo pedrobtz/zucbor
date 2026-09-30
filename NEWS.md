@@ -11,3 +11,12 @@
   by value. `deterministic = TRUE` also requires RFC 8949 core deterministic
   encoding. Every fault is a classed condition inheriting `zucbor_error`
   (see `?"zucbor-conditions"`).
+* `cbor_decode()` and `cbor_decode_seq()` turn CBOR into ordinary R values,
+  after the same whole-input check `cbor_validate()` runs. Arrays simplify to
+  atomic vectors when their elements agree; maps with text keys become named
+  lists; integers stay exact (`cbor_bigint` beyond 2^53); dates and times
+  become `POSIXct` and `Date`. `cbor_read()` and `cbor_read_seq()` read from
+  a file, URL or connection, never more than `max_size + 1` bytes.
+* `cbor_map()`, `cbor_tag()`, `cbor_simple()` and `cbor_bigint()` represent
+  the values R has no native type for.
+

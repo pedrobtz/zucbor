@@ -136,7 +136,7 @@ The core. Everything after it relies on what this stage guarantees.
 
 ## Stage 3 — Build phase: CBOR to R · L
 
-**Status:** not started.
+**Status:** complete.
 
 **Do**
 - `src/zu_build.c`: recursion bounded by the checked depth, preallocation from checked counts, `zu_mkchar()` as the only CHARSXP maker with the NUL and length guards (§6.8).
@@ -154,6 +154,17 @@ The core. Everything after it relies on what this stage guarantees.
 - Clean under `gctorture(TRUE)`; the fifty-times interleaved failing/succeeding test (`zujson`'s memory-model check) passes.
 - The interrupt test (`setTimeLimit()` inside the decode expression) unwinds, and the same input then decodes.
 - `cbor_read()` on an endless connection stops one byte past `max_size`.
+
+**What actually happened**
+
+- **Every Appendix A example decodes to the value it states,** checked with `identical()`. That covers `-0.0` keeping its sign, `1(1363896240.5)` as a fractional `POSIXct`, `{1: 2, 3: 4}` as a `cbor_map`, and all four 64-bit boundary integers and bignums as exact `cbor_bigint`.
+- **Bignums decode by value, which the design did not say.** §6.6 had tags 2 and 3 always becoming `cbor_bigint`. But duplicate keys are already compared by value, and `2(h'01')` *is* the integer 1. So a bignum now goes through the same integer ladder as a plain integer: `1L`, a double up to 2^53, and past that whatever `big_integers` says. Design §6.2 and §6.6 were amended in this commit.
+- **TinyCBOR's diagnostic printer suffixes floats (`1.5f16`).** It has no flag to omit the suffix, only a choice between `f16` and `_1`. That is fine for `cbor_diagnose()`, but it made `map_keys = "string"` name a half-float key `1.5f16`. Float keys are now named by the shortest round-trip decimal, formatted by zucbor. Every other non-text key keeps TinyCBOR's notation.
+- **A NUL inside a tag 0 string is not unrepresentable, it is simply not a date.** The design's security list had it as `zucbor_unrepresentable`, but that text never becomes an R string. It is `zucbor_invalid_error`, and §16 says so now.
+- **`gctorture(TRUE)` over every Appendix A example plus the lattice and map-key cases,** under two option sets and an error path, gives results `identical()` to the untortured run. The local UBSan build with `-UNDEBUG` is clean over the suite and the extended `tools/sanitizer-exercise.R`, which now drives decoding under every mapping option.
+- **The interrupt criterion is tested, not argued.** `setTimeLimit(elapsed = 0.01)` inside the same expression as decoding 4 million empty arrays fires from the `R_CheckUserInterrupt()` call sites, and the same input then decodes in full. zuxml waited two stages for want of this technique (its #37).
+- **`R_FindNamespace` plus a quoted call** raises build-phase faults from C with the user's call attached. The call is wrapped in `quote()` before the evaluated expression is built. An unquoted language object as an argument would have run the user's `cbor_decode(...)` call a second time inside the error handler.
+- **R's `close()` destroys a connection.** A test that asked `isOpen()` of a connection `cbor_read()` had opened and closed got "invalid connection". That is what closing means in R, so the test now expects exactly that.
 
 ---
 

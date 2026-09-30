@@ -6,6 +6,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"zucbor_build_info",   (DL_FUNC) &zucbor_build_info,   0},
     {"zucbor_status_names", (DL_FUNC) &zucbor_status_names, 0},
     {"zucbor_check",        (DL_FUNC) &zucbor_check,        6},
+    {"zucbor_decode",       (DL_FUNC) &zucbor_decode,       4},
     {NULL, NULL, 0}
 };
 

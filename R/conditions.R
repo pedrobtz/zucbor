@@ -21,6 +21,10 @@
 #'     is not in RFC 8949 core deterministic encoding.}
 #'   \item{`zucbor_duplicate_key`}{A map has the same key twice and
 #'     `duplicate_keys = FALSE`.}
+#'   \item{`zucbor_unrepresentable`}{The input is valid CBOR but holds a
+#'     value R cannot: a text string containing U+0000 or longer than an R
+#'     string, a tag number beyond 2^53, or an integer beyond 2^53 with
+#'     `big_integers = "error"`.}
 #'   \item{`zucbor_limit_error`}{A limit was reached. The subclasses
 #'     `zucbor_depth_limit`, `zucbor_size_limit` and `zucbor_item_limit` name
 #'     which one.}
@@ -95,6 +99,12 @@ zu_status_class <- local({
     ZU_ERR_ITEM_LIMIT = c("zucbor_item_limit", "zucbor_limit_error"),
     ZU_ERR_SIZE_LIMIT = c("zucbor_size_limit", "zucbor_limit_error"),
     CborErrorDataTooLarge = "zucbor_limit_error",
+    ZU_ERR_INVALID_DATE = invalid,
+    ZU_ERR_KEY_COLLISION = dup,
+    ZU_ERR_NUL_IN_TEXT = "zucbor_unrepresentable",
+    ZU_ERR_STRING_TOO_LONG = "zucbor_unrepresentable",
+    ZU_ERR_BIG_INTEGER = "zucbor_unrepresentable",
+    ZU_ERR_TAG_TOO_LARGE = "zucbor_unrepresentable",
     CborUnknownError = bare,
     CborErrorIO = bare,
     CborErrorTooManyItems = bare,
@@ -117,7 +127,10 @@ zu_fault_message <- function(fault, class) {
     zucbor_invalid_error = paste0("invalid CBOR", at, detail),
     zucbor_deterministic_error = paste0("CBOR not in deterministic encoding", at,
                                         if (nzchar(detail)) detail else ": bignum not in preferred form"),
-    zucbor_duplicate_key = paste0("duplicate map key", at),
+    zucbor_duplicate_key = paste0("duplicate map key", at,
+                                  if (identical(fault$status, "ZU_ERR_KEY_COLLISION"))
+                                    " once keys are stringified" else ""),
+    zucbor_unrepresentable = paste0("CBOR value R cannot hold", at, detail),
     zucbor_depth_limit = paste0("CBOR nested deeper than max_depth = ", fault$limit_value, at),
     zucbor_item_limit = paste0("CBOR has more than max_items = ",
                                format(fault$limit_value, scientific = FALSE), " data items", at),

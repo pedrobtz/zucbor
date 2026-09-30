@@ -83,7 +83,7 @@ Workflows in `.github/workflows/` delegate to reusable workflows in `pedrobtz/r-
 
 - `R-CMD-check.yaml` runs a **quick** profile on each push to a pull request and the **full** profile on pushes to `main`. Adding the `full-ci` label to a PR reruns it with the full profile before merging.
 - `coverage.yaml` commits the badge to `.github/badges/coverage.svg` on `main`.
-- `pkgdown.yaml` builds the site and deploys `docs/` to `gh-pages` (https://pedrobtz.github.io/zucbor/).
+- `pkgdown.yaml` builds the site and deploys `docs/` to `gh-pages` (https://pedrobtz.github.io/zucbor/). `_pkgdown.yml` sets `development: mode: auto`: a release version (`0.1.0`) builds at the root, a development version (`0.1.0.9000`) into `dev/`, and the deploy keeps both (`clean: false`). So after each CRAN release, bump `main` to `x.y.z.9000` (with a matching `NEWS.md` heading) to publish the dev site without replacing the released docs.
 - `vendor.yaml`: the vendored-tree guard, the shared-object symbol check and the status-table check.
 - `native-checks.yaml`: UBSan and ASan (with `-UNDEBUG`), valgrind, LTO, gctorture (quick step on PRs), a blocking `rchk`, and the `conformance` job.
 - `hardening.yaml`: `tools/run-lint`, `tools/run-mutation-check`, `tools/check-no-network`, and `tools/run-fuzz` (libFuzzer, canary first; 2 minutes per PR, 30 nightly on a cached corpus). Apple's clang has no libFuzzer.

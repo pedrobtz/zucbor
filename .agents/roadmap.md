@@ -351,6 +351,8 @@ Writing it out found one criterion (7) that nothing checks mechanically, and one
 
 **What remains, and is yours:** tag `v0.1.0` on `main`, submit to CRAN (`devtools::submit_cran()`), and respond to the reviewers. `cran-comments.md` is ready.
 
+**After acceptance:** bump `main` to `0.1.0.9000` with a `# zucbor 0.1.0.9000` NEWS heading. pkgdown's development mode (`mode: auto`) then builds the dev site into `/dev/` and leaves the released 0.1.0 docs at the root.
+
 ---
 
 ## Risk register

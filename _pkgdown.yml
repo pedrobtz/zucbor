@@ -2,6 +2,12 @@ url: https://pedrobtz.github.io/zucbor/
 template:
   bootstrap: 5
 
+# A release version (0.1.0) builds the site at the root; a development
+# version (0.1.0.9000) builds it into dev/, leaving the released docs at the
+# root. The deploy step keeps both (clean: false in pkgdown.yaml).
+development:
+  mode: auto
+
 reference:
   - title: Decode
     contents:

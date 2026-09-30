@@ -47,7 +47,7 @@
 </ul></div>
 <div class="section level2">
 <h2 id="current-state">Current state<a class="anchor" aria-label="anchor" href="#current-state"></a></h2>
-<p>The repository is a bare usethis skeleton: <code>DESCRIPTION</code> still has placeholder Title/Description/Authors, <code>README.md</code> is the template, <code>tests/testthat/test-zucbor.R</code> is the template test, there is no R API, and <code>src/</code> has no C sources or vendored TinyCBOR yet. <code>R/zucbor-package.R</code> declares <code>@useDynLib zucbor, .registration = TRUE</code>, so the package will not install until <code>src/</code> contains compiled code with an init/registration routine.</p>
+<p>The repository is a bare usethis skeleton: <code>DESCRIPTION</code> still has placeholder Title/Description/Authors, <code>README.md</code> is the template, <code>tests/testthat/test-zucbor.R</code> is the template test, there is no R API, and TinyCBOR is not vendored yet. <code>src/init.c</code> registers the DLL with an empty <code>.Call</code> table; each new entry point goes in that table (<code>@useDynLib zucbor, .registration = TRUE</code> with <code>R_useDynamicSymbols(dll, FALSE)</code>, so an unregistered symbol is not callable).</p>
 <p><code>NEWS.md</code> still has the usethis heading <code># zucbor (development version)</code>. The siblings learned that R CMD check wants <code># zucbor &lt;version&gt;</code> once that is the only heading, or it emits a NEWS NOTE.</p>
 </div>
 <div class="section level2">

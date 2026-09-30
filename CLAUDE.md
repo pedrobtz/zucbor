@@ -33,10 +33,11 @@ Intended properties that should shape every design decision:
 The repository is a bare usethis skeleton: `DESCRIPTION` still has
 placeholder Title/Description/Authors, `README.md` is the template,
 `tests/testthat/test-zucbor.R` is the template test, there is no R API,
-and `src/` has no C sources or vendored TinyCBOR yet.
-`R/zucbor-package.R` declares `@useDynLib zucbor, .registration = TRUE`,
-so the package will not install until `src/` contains compiled code with
-an init/registration routine.
+and TinyCBOR is not vendored yet. `src/init.c` registers the DLL with an
+empty `.Call` table; each new entry point goes in that table
+(`@useDynLib zucbor, .registration = TRUE` with
+`R_useDynamicSymbols(dll, FALSE)`, so an unregistered symbol is not
+callable).
 
 `NEWS.md` still has the usethis heading
 `# zucbor (development version)`. The siblings learned that R CMD check

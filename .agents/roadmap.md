@@ -18,6 +18,8 @@ Sizes are relative: **S** ≈ a sitting, **M** ≈ a few, **L** ≈ the stage is
 
 **Status never goes in a heading — issue links use the anchors.** A heading is `## Stage N — Title · Size` and nothing else; a stage's state is the **Status:** line directly under it. Status words in a heading change its GitHub anchor, which silently breaks every issue that links to the stage.
 
+**Tracking.** The `v0.1.0` milestone holds umbrella issue #4, and each stage has one `stage`-labelled sub-issue: Stage 0 is #5, and so on to Stage 9, which is #14. Each issue links to its stage's heading here, and this file stays authoritative. Close a stage's issue when its exit criteria pass, and update its **Status:** line in the same PR.
+
 ---
 
 ## Stage 0 — Repo hygiene and consumer inventory · S

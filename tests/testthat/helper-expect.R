@@ -12,3 +12,26 @@ determ_error <- function(hex) {
   expect_error(cbor_validate(hex_raw(hex), deterministic = TRUE, error = TRUE),
                class = "zucbor_deterministic_error", info = hex)
 }
+
+# The head of a text string of s's UTF-8 length.
+text_head <- function(s) {
+  n <- length(charToRaw(s))
+  if (n < 24) as.raw(0x60 + n) else if (n < 256) as.raw(c(0x78, n)) else stop("too long")
+}
+
+utc <- function(secs) structure(secs, class = c("POSIXct", "POSIXt"), tzone = "UTC")
+
+# A double from its IEEE 754 bits, big-endian hex. R's parser does not round
+# every decimal literal correctly where long double is only a double (macOS
+# arm64 at Stage 3: 5.960464477539063e-08 was one ulp off), so any float a
+# test compares exactly is built from its bits, or from arithmetic that is
+# exact.
+f64 <- function(hex) readBin(hex_raw(hex), "double", size = 8L, endian = "big")
+f32 <- function(hex) readBin(hex_raw(hex), "double", size = 4L, endian = "big")
+
+# Skips a test that allocates millions of R objects. It checks a limit or a
+# code path, not memory safety, and under gctorture it would take hours;
+# native-checks.yaml sets ZUCBOR_SKIP_HEAVY for the gctorture job.
+skip_heavy <- function() {
+  skip_if(nzchar(Sys.getenv("ZUCBOR_SKIP_HEAVY")), "ZUCBOR_SKIP_HEAVY is set")
+}

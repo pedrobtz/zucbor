@@ -23,6 +23,10 @@ type.}
 is not in RFC 8949 core deterministic encoding.}
 \item{\code{zucbor_duplicate_key}}{A map has the same key twice and
 \code{duplicate_keys = FALSE}.}
+\item{\code{zucbor_unrepresentable}}{The input is valid CBOR but holds a
+value R cannot: a text string containing U+0000 or longer than an R
+string, a tag number beyond 2^53, or an integer beyond 2^53 with
+\code{big_integers = "error"}.}
 \item{\code{zucbor_limit_error}}{A limit was reached. The subclasses
 \code{zucbor_depth_limit}, \code{zucbor_size_limit} and \code{zucbor_item_limit} name
 which one.}

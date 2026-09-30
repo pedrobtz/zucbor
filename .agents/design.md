@@ -131,7 +131,7 @@ cbor_bigint(x)               # integer outside what a double holds exactly
 zucbor_info()                # TinyCBOR version, compiled limits, defaults
 ```
 
-Thirteen functions, plus `print`, `format`, `as.character` and `length` methods for the four classes, and `as.numeric` for `cbor_bigint`.
+Thirteen functions, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
 
 **Why `decode`/`encode`, not `parse`/`write`.** The siblings' verbs are for text formats. RFC 8949 speaks of encoders and decoders, and so do the protocols this package serves; a user reading COSE code in another language will look for those words.
 
@@ -218,7 +218,7 @@ The invariant, shared with `zuyaml`:
 
 `zujson` answers the other way (nearest double) and says why: a wide integer in an HTTP body is usually an identifier nobody computes with. In CBOR it is as often a nonce, a counter or a nanosecond timestamp — and the whole point of the format over JSON is that such values are exact. So the default here is `zuyaml`'s.
 
-`cbor_bigint` is a character vector holding the **canonical decimal** (no leading zeros, `-` only for negatives, no `+`), not the source bytes. It ships with `format`, `print`, `as.character` and `as.numeric` methods and a validating constructor. It is also what tags 2 and 3 decode to (§6.6), so a wide integer is one class however it was encoded.
+`cbor_bigint` is a character vector holding the **canonical decimal** (no leading zeros, `-` only for negatives, no `+`), not the source bytes. It ships with `format`, `print`, `as.character`, `as.numeric` and `[` methods and a validating constructor. Tags 2 and 3 decode by **value** through the same ladder: `2(h'01')` is `1L`, and only a bignum beyond 2^53 is a `cbor_bigint` (or a double, or an error, by `big_integers`). So an integer is one R value however it was encoded, which is what duplicate-key comparison by value (§6.5) already assumes.
 
 ### 6.3 Arrays and the simplification lattice
 
@@ -275,6 +275,8 @@ structure(
 
 Two parallel lists, as `zuyaml_map` is, because iteration and encoding both want keys and values separately. Keys are decoded with the same mapping as values, so an integer key is an `integer`, a byte-string key a `raw`.
 
+Under `"string"`, a text key names its entry as it is; a float key by its shortest round-trip decimal, always with a decimal point (`1.0`, `1.5`, `NaN`, `-Infinity`); and any other key by its RFC 8949 §8 diagnostic notation (`1`, `h'01'`, `true`, `[1, 2]`). Floats are formatted by zucbor because TinyCBOR's printer appends its width (`1.5f16`), which is encoding, not value. A collision after stringifying is `zucbor_duplicate_key` (status `ZU_ERR_KEY_COLLISION`) whatever `duplicate_keys` says, since a named list cannot record which entry was which.
+
 The invariant, shared with `zuyaml`:
 
 > A key R cannot hold as a name is preserved structurally, never coerced.
@@ -308,7 +310,7 @@ tags = "keep"      # every tag is a cbor_tag; nothing is converted or stripped
 |---|---|---|
 | 0 | RFC 3339 date/time text | `POSIXct`, UTC |
 | 1 | epoch seconds, integer or float | `POSIXct`, UTC |
-| 2 / 3 | unsigned / negative bignum, byte string | `cbor_bigint` |
+| 2 / 3 | unsigned / negative bignum, byte string | the integer of that value, by §6.2 |
 | 100 | days since 1970-01-01, integer (RFC 8943) | `Date` |
 | 1004 | RFC 3339 full-date text (RFC 8943) | `Date` |
 | 55799 | self-describe | stripped; the content decodes as if untagged |
@@ -611,6 +613,7 @@ src/zucbor.h                  internal prototypes
 src/zu_cond.c                 conditions, status names
 src/zu_walk.c                 check phase: walk, limits, duplicate keys, tag content
 src/zu_build.c                build phase: §6
+src/zu_cbor.h                 internal prototypes that take TinyCBOR types
 src/zu_encode.c               §7, §8
 src/zu_float.c                width selection, half conversion
 src/zu_bigint.c               decimal <-> magnitude
@@ -671,7 +674,7 @@ Every row of the §6 and §7 tables has a test. The tables in the roxygen docs, 
 - 100,000 nested arrays, and 100,000 nested tags → `zucbor_depth_limit`, no stack overflow.
 - `max_items` + 1 empty arrays → `zucbor_item_limit` before any R allocation.
 - Duplicate keys in every comparison class of §6.5, including `1` vs `0x1801`.
-- A NUL in a text string, in a map key, in a tag 0 string → `zucbor_unrepresentable`.
+- A NUL in a text string or a map key → `zucbor_unrepresentable`, while `cbor_validate()` accepts the same bytes. In a tag 0 string it is `zucbor_invalid_error`: that text never becomes an R string, it is simply not a date.
 - Invalid UTF-8 in text and in keys; truncation at every byte of every Appendix A example.
 - `cbor_read()` on an endless connection stops one byte past `max_size`.
 - Interrupt: `setTimeLimit()` inside the same expression as a large decode unwinds cleanly and the same input then decodes (`zuxml` #37).

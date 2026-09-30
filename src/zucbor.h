@@ -53,6 +53,12 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
 #define ZU_ERR_DUPLICATE_KEY        "ZU_ERR_DUPLICATE_KEY"
 #define ZU_ERR_BIGNUM_NOT_PREFERRED "ZU_ERR_BIGNUM_NOT_PREFERRED"
 #define ZU_ERR_ODD_MAP              "ZU_ERR_ODD_MAP"
+#define ZU_ERR_NUL_IN_TEXT          "ZU_ERR_NUL_IN_TEXT"
+#define ZU_ERR_STRING_TOO_LONG      "ZU_ERR_STRING_TOO_LONG"
+#define ZU_ERR_BIG_INTEGER          "ZU_ERR_BIG_INTEGER"
+#define ZU_ERR_TAG_TOO_LARGE        "ZU_ERR_TAG_TOO_LARGE"
+#define ZU_ERR_INVALID_DATE         "ZU_ERR_INVALID_DATE"
+#define ZU_ERR_KEY_COLLISION        "ZU_ERR_KEY_COLLISION"
 
 /* ---- zu_cond.c ------------------------------------------------------------ */
 
@@ -63,6 +69,14 @@ SEXP zu_fault_sexp(const zu_fault *fault);
 /* ---- zu_float.c ----------------------------------------------------------- */
 
 double zu_half_to_double(uint16_t half);
+void zu_format_double(double d, char *buf);
+
+/* ---- zu_bigint.c, zu_time.c ---------------------------------------------- */
+
+size_t zu_u64_to_dec(uint64_t v, char *buf);
+const char *zu_magnitude_to_dec(const uint8_t *mag, size_t n, int add_one, int negative);
+int zu_parse_rfc3339(const char *s, size_t len, double *secs);
+int zu_parse_full_date(const char *s, size_t len, double *days);
 
 /* ---- .Call entry points, registered in init.c ----------------------------- */
 
@@ -70,5 +84,6 @@ SEXP zucbor_build_info(void);
 SEXP zucbor_status_names(void);
 SEXP zucbor_check(SEXP x, SEXP sequence, SEXP deterministic,
                   SEXP duplicate_keys, SEXP max_depth, SEXP max_items);
+SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call);
 
 #endif

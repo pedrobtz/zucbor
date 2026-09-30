@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "zucbor.h"
@@ -39,7 +40,7 @@ void zu_format_double(double d, char *buf)
     }
     for (int prec = 1; prec <= 17; prec++) {
         snprintf(buf, 32, "%.*g", prec, d);
-        if (R_strtod(buf, NULL) == d)
+        if (strtod(buf, NULL) == d)     /* not R_strtod(): see zu_build.c */
             break;
     }
     if (!strpbrk(buf, ".e"))

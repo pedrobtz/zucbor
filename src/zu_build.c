@@ -17,6 +17,7 @@
  * R_alloc()ed (design section 12). */
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "zu_cbor.h"
@@ -146,8 +147,9 @@ static SEXP classed_real(double v, const char *cls, int with_tz)
         SET_STRING_ELT(klass, 0, Rf_mkChar("POSIXct"));
         SET_STRING_ELT(klass, 1, Rf_mkChar("POSIXt"));
         Rf_setAttrib(out, R_ClassSymbol, klass);
-        Rf_setAttrib(out, Rf_install("tzone"), Rf_mkString("UTC"));
-        UNPROTECT(1);
+        SEXP tz = PROTECT(Rf_mkString("UTC"));
+        Rf_setAttrib(out, Rf_install("tzone"), tz);
+        UNPROTECT(2);
     } else {
         Rf_setAttrib(out, R_ClassSymbol, Rf_mkString(cls));
     }
@@ -269,7 +271,10 @@ static SEXP bignum(zu_builder *b, CborTag tag, CborValue *it, int *kind, const u
     const char *dec = zu_magnitude_to_dec(p, n, negative, negative);
     if (b->big_integers == BIG_DOUBLE) {
         *kind = K_INTDBL;
-        out = Rf_ScalarReal(R_strtod(dec, NULL));
+        /* strtod(), not R_strtod(): the C library's is correctly rounded;
+         * R's is not where long double is only a double (macOS arm64). R
+         * keeps LC_NUMERIC at "C", so the decimal point is '.'. */
+        out = Rf_ScalarReal(strtod(dec, NULL));
     } else {
         *kind = K_BIGINT;
         out = scalar_bigint(dec);

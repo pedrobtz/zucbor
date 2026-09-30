@@ -20,3 +20,11 @@ text_head <- function(s) {
 }
 
 utc <- function(secs) structure(secs, class = c("POSIXct", "POSIXt"), tzone = "UTC")
+
+# A double from its IEEE 754 bits, big-endian hex. R's parser does not round
+# every decimal literal correctly where long double is only a double (macOS
+# arm64 at Stage 3: 5.960464477539063e-08 was one ulp off), so any float a
+# test compares exactly is built from its bits, or from arithmetic that is
+# exact.
+f64 <- function(hex) readBin(hex_raw(hex), "double", size = 8L, endian = "big")
+f32 <- function(hex) readBin(hex_raw(hex), "double", size = 4L, endian = "big")

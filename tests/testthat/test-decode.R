@@ -8,17 +8,17 @@ test_that("RFC 8949 Appendix A decodes to the values it states", {
     "3bffffffffffffffff" = cbor_bigint("-18446744073709551616"),
     "c349010000000000000000" = cbor_bigint("-18446744073709551617"),
     "20" = -1L, "29" = -10L, "3863" = -100L, "3903e7" = -1000L,
-    "f90000" = 0, "f93c00" = 1, "fb3ff199999999999a" = 1.1, "f93e00" = 1.5,
-    "f97bff" = 65504, "fa47c35000" = 1e5, "fa7f7fffff" = 3.4028234663852886e+38,
-    "fb7e37e43c8800759c" = 1e300, "f90001" = 5.960464477539063e-08,
-    "f90400" = 6.103515625e-05, "f9c400" = -4, "fbc010666666666666" = -4.1,
+    "f90000" = 0, "f93c00" = 1, "fb3ff199999999999a" = f64("3ff199999999999a"),
+    "f93e00" = 1.5, "f97bff" = 65504, "fa47c35000" = 1e5, "fa7f7fffff" = f32("7f7fffff"),
+    "fb7e37e43c8800759c" = f64("7e37e43c8800759c"), "f90001" = 2^-24,
+    "f90400" = 2^-14, "f9c400" = -4, "fbc010666666666666" = f64("c010666666666666"),
     "f97c00" = Inf, "f97e00" = NaN, "f9fc00" = -Inf, "fa7f800000" = Inf,
     "fa7fc00000" = NaN, "faff800000" = -Inf, "fb7ff0000000000000" = Inf,
     "fb7ff8000000000000" = NaN, "fbfff0000000000000" = -Inf,
     "f4" = FALSE, "f5" = TRUE, "f6" = NULL, "f7" = NULL,
     "f0" = cbor_simple(16), "f8ff" = cbor_simple(255),
     "c074323031332d30332d32315432303a30343a30305a" = utc(1363896240),
-    "c11a514b67b0" = utc(1363896240), "c1fb41d452d9ec200000" = utc(1363896240.5),
+    "c11a514b67b0" = utc(1363896240), "c1fb41d452d9ec200000" = utc(1363896240 + 0.5),
     "d74401020304" = cbor_tag(23, as.raw(1:4)),
     "d818456449455446" = cbor_tag(24, as.raw(c(0x64, 0x49, 0x45, 0x54, 0x46))),
     "d82076687474703a2f2f7777772e6578616d706c652e636f6d" = cbor_tag(32, "http://www.example.com"),
@@ -68,9 +68,8 @@ test_that("integers take the narrowest exact R type", {
 test_that("big_integers decides beyond 2^53", {
   x <- hex_raw("1b ff ff ff ff ff ff ff ff")
   expect_identical(cbor_decode(x), cbor_bigint("18446744073709551615"))
-  expect_identical(cbor_decode(x, big_integers = "double"), 18446744073709551615)
-  expect_identical(cbor_decode(hex_raw("3b ff ff ff ff ff ff ff ff"), big_integers = "double"),
-                   -18446744073709551616)
+  expect_identical(cbor_decode(x, big_integers = "double"), 2^64)
+  expect_identical(cbor_decode(hex_raw("3b ff ff ff ff ff ff ff ff"), big_integers = "double"), -2^64)
   e <- expect_error(cbor_decode(x, big_integers = "error"), class = "zucbor_unrepresentable")
   expect_identical(e$offset, 0)
   expect_identical(cbor_decode(hex_raw("19 01 00"), big_integers = "error"), 256L)
@@ -166,7 +165,7 @@ test_that("dates and times convert, with offsets applied", {
   expect_identical(cbor_decode(t0("2013-03-21T20:04:00Z")), utc(1363896240))
   expect_identical(cbor_decode(t0("2013-03-21T21:04:00+01:00")), utc(1363896240))
   expect_identical(cbor_decode(t0("2013-03-21T19:34:00-00:30")), utc(1363896240))
-  expect_identical(cbor_decode(t0("2013-03-21t20:04:00.25z")), utc(1363896240.25))
+  expect_identical(cbor_decode(t0("2013-03-21t20:04:00.25z")), utc(1363896240 + 0.25))
   expect_identical(cbor_decode(t0("1969-12-31T23:59:59Z")), utc(-1))
   expect_identical(cbor_decode(t0("2016-12-31T23:59:60Z")), utc(1483228800))
   expect_identical(cbor_decode(t0("2000-02-29T00:00:00Z")), utc(951782400))

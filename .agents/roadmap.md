@@ -164,6 +164,9 @@ The core. Everything after it relies on what this stage guarantees.
 - **`gctorture(TRUE)` over every Appendix A example plus the lattice and map-key cases,** under two option sets and an error path, gives results `identical()` to the untortured run. The local UBSan build with `-UNDEBUG` is clean over the suite and the extended `tools/sanitizer-exercise.R`, which now drives decoding under every mapping option.
 - **The interrupt criterion is tested, not argued.** `setTimeLimit(elapsed = 0.01)` inside the same expression as decoding 4 million empty arrays fires from the `R_CheckUserInterrupt()` call sites, and the same input then decodes in full. zuxml waited two stages for want of this technique (its #37).
 - **`R_FindNamespace` plus a quoted call** raises build-phase faults from C with the user's call attached. The call is wrapped in `quote()` before the evaluated expression is built. An unquoted language object as an argument would have run the user's `cbor_decode(...)` call a second time inside the error handler.
+- **CI found two things the local runs could not.**
+  - *macOS arm64:* R's parser does not round every decimal literal correctly where `long double` is only a double, so the test literal `5.960464477539063e-08` came out one ulp away from 2^-24, which the decoder had produced exactly. Tests now build exact floats from their bits (`f64()`, `f32()`) or from exact arithmetic. The C code stopped using `R_strtod()`, which has the same weakness, in favour of the C library's correctly rounded `strtod()`. R keeps `LC_NUMERIC` at `"C"`, so the decimal point is safe.
+  - *rchk:* `Rf_setAttrib(out, Rf_install("tzone"), Rf_mkString("UTC"))` passed two unprotected arguments. The string is PROTECTed first now.
 - **R's `close()` destroys a connection.** A test that asked `isOpen()` of a connection `cbor_read()` had opened and closed got "invalid connection". That is what closing means in R, so the test now expects exactly that.
 
 ---

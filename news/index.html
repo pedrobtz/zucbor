@@ -38,6 +38,8 @@
 <li>Bundles TinyCBOR 7.0 (<code>src/vendor/tinycbor</code>), verified byte-for-byte against the upstream release by <code>tools/verify-vendor</code>.</li>
 <li>
 <code><a href="../reference/zucbor_info.html">zucbor_info()</a></code> reports the bundled TinyCBOR version, the ceiling on nesting depth and the default decoding limits.</li>
+<li>
+<code><a href="../reference/cbor_validate.html">cbor_validate()</a></code> checks that a raw vector holds well-formed, valid CBOR, or an RFC 8742 sequence, within depth, size and item limits, without building any R value. Duplicate map keys are refused by default, compared by value. <code>deterministic = TRUE</code> also requires RFC 8949 core deterministic encoding. Every fault is a classed condition inheriting <code>zucbor_error</code> (see <code><a href="../reference/zucbor-conditions.html">?"zucbor-conditions"</a></code>).</li>
 </ul></div>
   </main></div>
 

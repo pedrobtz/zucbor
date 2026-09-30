@@ -44,16 +44,27 @@ since that changes the anchor. Read both before starting work; a
 decision in design §18 is settled unless the work shows it is wrong, and
 then the design changes in the same commit.
 
-Stages 0–1 are done. TinyCBOR 7.0 is vendored in `src/vendor/tinycbor/`
+Stages 0–2 are done. TinyCBOR 7.0 is vendored in `src/vendor/tinycbor/`
 (byte-identical; `tools/verify-vendor` proves it, and the `vendor`
 workflow runs it), with the two headers upstream generates at CMake time
 written by `tools/update-tinycbor` into the project-owned
-`src/tinycbor/`. The only R function is
-[`zucbor_info()`](https://pedrobtz.github.io/zucbor/reference/zucbor_info.md).
-`README.md` is still the template (Stage 8). `src/init.c` registers
-every `.Call` entry point (`R_useDynamicSymbols(dll, FALSE)`,
-`R_forceSymbols(dll, TRUE)`), so an unregistered symbol is not callable
-and R code calls `.Call(zucbor_x)`, never `.Call("zucbor_x")`.
+`src/tinycbor/`. The R API so far is
+[`zucbor_info()`](https://pedrobtz.github.io/zucbor/reference/zucbor_info.md)
+and
+[`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md),
+which is the whole check phase (`src/zu_walk.c`): an iterative walk for
+limits, duplicate keys (by value, merge-sorted per map), tag content and
+offsets, then `cbor_value_validate()` for UTF-8 and deterministic
+encoding. The walk returns a fault to R, which raises it with the user’s
+call (`zu_raise_fault()`); status names map to classes in
+`zu_status_class` (`R/conditions.R`), and `tools/check-status-table`
+keeps the C table equal to `cbor.h`. Do not switch on
+`CborValidateTagUse`: TinyCBOR’s table refuses valid tag 1 floats
+(design §3, §11). `README.md` is still the template (Stage 8).
+`src/init.c` registers every `.Call` entry point
+(`R_useDynamicSymbols(dll, FALSE)`, `R_forceSymbols(dll, TRUE)`), so an
+unregistered symbol is not callable and R code calls `.Call(zucbor_x)`,
+never `.Call("zucbor_x")`.
 
 `NEWS.md` keeps a versioned heading: R CMD check NOTEs a bare
 `# zucbor (development version)` once it is the only heading.

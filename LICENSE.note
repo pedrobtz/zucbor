@@ -1,0 +1,7 @@
+zucbor is licensed under the MIT License (see LICENSE).
+
+It bundles TinyCBOR 7.0 in src/vendor/tinycbor, copyright Intel
+Corporation, also under the MIT License. The bundled files are unmodified
+copies of upstream's; their licence text is src/vendor/tinycbor/LICENSE, and
+where they came from is recorded in src/vendor/PROVENANCE. The copyright
+notices are collected in inst/COPYRIGHTS.

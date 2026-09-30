@@ -1,5 +1,5 @@
 # Changelog
 
-## zucbor (development version)
+## zucbor 0.0.0.9000
 
-- Initial CRAN submission.
+- Package skeleton: metadata, licence and build configuration.

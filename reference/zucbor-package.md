@@ -1,17 +1,26 @@
-# zucbor: What the Package Does (One Line, Title Case)
+# zucbor: Deterministic and Secure CBOR Encoding and Decoding
 
-What the package does (one paragraph).
+Encodes R values as Concise Binary Object Representation (CBOR, RFC
+8949) and decodes CBOR into ordinary R vectors and lists. Decoding
+checks the whole input against configurable depth, size and item limits
+before any R object is built, so untrusted input from network peers and
+devices cannot drive large allocations. Encoding is deterministic:
+identical R objects always produce identical bytes.
 
 ## See also
 
 Useful links:
 
+- <https://github.com/pedrobtz/zucbor>
+
 - <https://pedrobtz.github.io/zucbor/>
+
+- Report bugs at <https://github.com/pedrobtz/zucbor/issues>
 
 ## Author
 
-**Maintainer**: First Last <first.last@example.com>
+**Maintainer**: Pedro Baltazar <pedrobtz@gmail.com> \[copyright holder\]
 
 Authors:
 
-- First Last <first.last@example.com>
+- Pedro Baltazar <pedrobtz@gmail.com> \[copyright holder\]

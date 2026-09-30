@@ -2,17 +2,21 @@
 
 ## Authors
 
-- **First Last**. Author, maintainer.
+- **Pedro Baltazar**. Author, maintainer, copyright holder.
 
 ## Citation
 
-Last F (2026). *zucbor: What the Package Does (One Line, Title Case)*. R
-package version 0.0.0.9000, <https://pedrobtz.github.io/zucbor/>.
+Source:
+[`DESCRIPTION`](https://github.com/pedrobtz/zucbor/blob/main/DESCRIPTION)
+
+Baltazar P (2026). *zucbor: Deterministic and Secure CBOR Encoding and
+Decoding*. R package version 0.0.0.9000,
+<https://github.com/pedrobtz/zucbor>.
 
     @Manual{,
-      title = {zucbor: What the Package Does (One Line, Title Case)},
-      author = {First Last},
+      title = {zucbor: Deterministic and Secure CBOR Encoding and Decoding},
+      author = {Pedro Baltazar},
       year = {2026},
       note = {R package version 0.0.0.9000},
-      url = {https://pedrobtz.github.io/zucbor/},
+      url = {https://github.com/pedrobtz/zucbor},
     }

@@ -44,19 +44,22 @@ since that changes the anchor. Read both before starting work; a
 decision in design §18 is settled unless the work shows it is wrong, and
 then the design changes in the same commit.
 
-The code is a bare usethis skeleton: `DESCRIPTION` still has placeholder
-Title/Description/Authors, `README.md` is the template,
-`tests/testthat/test-zucbor.R` is the template test, there is no R API,
-and TinyCBOR is not vendored yet. `src/init.c` registers the DLL with an
-empty `.Call` table; each new entry point goes in that table
+Stage 0 is done: `DESCRIPTION` and the licence files are real, `NEWS.md`
+has a versioned heading (R CMD check NOTEs a bare
+`# zucbor (development version)` once it is the only heading, so keep it
+versioned), and `tests/testthat/test-init.R` replaces the template test.
+`README.md` is still the template (Stage 8), there is no R API, and
+TinyCBOR is not vendored yet (Stage 1). `src/init.c` registers the DLL
+with an empty `.Call` table; each new entry point goes in that table
 (`@useDynLib zucbor, .registration = TRUE` with
 `R_useDynamicSymbols(dll, FALSE)`, so an unregistered symbol is not
 callable).
 
-`NEWS.md` still has the usethis heading
-`# zucbor (development version)`. The siblings learned that R CMD check
-wants `# zucbor <version>` once that is the only heading, or it emits a
-NEWS NOTE.
+No sibling package is a confirmed consumer (roadmap Stage 0 inventory),
+so v1 is the R API only: no C API, no archive.
+
+roxygen2 must be 8.1.0 or newer (`Config/roxygen2/version` in
+DESCRIPTION); an older one rewrites `man/` on `document()`.
 
 ## Commands
 
@@ -64,14 +67,15 @@ NEWS NOTE.
 Rscript -e 'devtools::document()'                  # roxygen -> NAMESPACE + man/
 Rscript -e 'devtools::load_all()'                  # compile + load
 Rscript -e 'devtools::test()'
-Rscript -e 'devtools::test(filter = "zucbor")'     # one file: tests/testthat/test-zucbor.R
+Rscript -e 'devtools::test(filter = "init")'       # one file: tests/testthat/test-init.R
 Rscript -e 'devtools::test(shuffle = TRUE)'        # order-independence check
 Rscript -e 'devtools::check(cran = TRUE)'
 Rscript -e 'pkgdown::build_site()'                 # site -> docs/ (gitignored)
 ```
 
 testthat edition 3; roxygen2 with markdown enabled
-(`RoxygenNote: 8.0.0`). Never hand-edit `NAMESPACE` or `man/`.
+(`Config/roxygen2/version: 8.1.0`). Never hand-edit `NAMESPACE` or
+`man/`.
 
 ## CI
 

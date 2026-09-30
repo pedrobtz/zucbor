@@ -196,14 +196,14 @@ void zu_format_double(double d, char *buf)
         *o++ = 'e';
         *o++ = x < 0 ? '-' : '+';
         x = abs(x);
-        char d[4];
-        int k = 0;
+        char exp_digits[4];
+        int nd = 0;
         do {
-            d[k++] = (char)('0' + x % 10);
+            exp_digits[nd++] = (char)('0' + x % 10);
             x /= 10;
         } while (x);
-        while (k)
-            *o++ = d[--k];
+        while (nd)
+            *o++ = exp_digits[--nd];
         *o = '\0';
     }
 }

@@ -9,7 +9,10 @@ set -eu
 CC=${CC:-cc}
 RINC=$(Rscript -e 'cat(R.home("include"))')
 FLAGS="-std=gnu17 -DNDEBUG -Wall -Wextra -Wpedantic -Wshadow -Wstrict-prototypes -Werror -fsyntax-only"
-INC="-I$RINC -Isrc -Isrc/tinycbor -Isrc/vendor/tinycbor"
+# R's headers are -isystem: R 4.6's R_ext/Boolean.h uses a C23 enum form
+# that -Wpedantic rejects in gnu17, and the gate is for zucbor's code, not
+# R's (zujson met the same header).
+INC="-isystem $RINC -Isrc -Isrc/tinycbor -Isrc/vendor/tinycbor"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 

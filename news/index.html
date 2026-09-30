@@ -40,6 +40,10 @@
 <code><a href="../reference/zucbor_info.html">zucbor_info()</a></code> reports the bundled TinyCBOR version, the ceiling on nesting depth and the default decoding limits.</li>
 <li>
 <code><a href="../reference/cbor_validate.html">cbor_validate()</a></code> checks that a raw vector holds well-formed, valid CBOR, or an RFC 8742 sequence, within depth, size and item limits, without building any R value. Duplicate map keys are refused by default, compared by value. <code>deterministic = TRUE</code> also requires RFC 8949 core deterministic encoding. Every fault is a classed condition inheriting <code>zucbor_error</code> (see <code><a href="../reference/zucbor-conditions.html">?"zucbor-conditions"</a></code>).</li>
+<li>
+<code><a href="../reference/cbor_decode.html">cbor_decode()</a></code> and <code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code> turn CBOR into ordinary R values, after the same whole-input check <code><a href="../reference/cbor_validate.html">cbor_validate()</a></code> runs. Arrays simplify to atomic vectors when their elements agree; maps with text keys become named lists; integers stay exact (<code>cbor_bigint</code> beyond 2^53); dates and times become <code>POSIXct</code> and <code>Date</code>. <code><a href="../reference/cbor_read.html">cbor_read()</a></code> and <code><a href="../reference/cbor_read.html">cbor_read_seq()</a></code> read from a file, URL or connection, never more than <code>max_size + 1</code> bytes.</li>
+<li>
+<code><a href="../reference/cbor-values.html">cbor_map()</a></code>, <code><a href="../reference/cbor-values.html">cbor_tag()</a></code>, <code><a href="../reference/cbor-values.html">cbor_simple()</a></code> and <code><a href="../reference/cbor-values.html">cbor_bigint()</a></code> represent the values R has no native type for.</li>
 </ul></div>
   </main></div>
 

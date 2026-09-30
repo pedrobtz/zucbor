@@ -44,12 +44,19 @@ since that changes the anchor. Read both before starting work; a
 decision in design §18 is settled unless the work shows it is wrong, and
 then the design changes in the same commit.
 
-Stages 0–2 are done. TinyCBOR 7.0 is vendored in `src/vendor/tinycbor/`
+Stages 0–3 are done. TinyCBOR 7.0 is vendored in `src/vendor/tinycbor/`
 (byte-identical; `tools/verify-vendor` proves it, and the `vendor`
 workflow runs it), with the two headers upstream generates at CMake time
 written by `tools/update-tinycbor` into the project-owned
 `src/tinycbor/`. The R API so far is
-[`zucbor_info()`](https://pedrobtz.github.io/zucbor/reference/zucbor_info.md)
+[`zucbor_info()`](https://pedrobtz.github.io/zucbor/reference/zucbor_info.md),
+[`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)/[`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md),
+[`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)/[`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md),
+the value classes
+([`cbor_map()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md),
+[`cbor_tag()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md),
+[`cbor_simple()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md),
+[`cbor_bigint()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md))
 and
 [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md),
 which is the whole check phase (`src/zu_walk.c`): an iterative walk for
@@ -58,7 +65,12 @@ offsets, then `cbor_value_validate()` for UTF-8 and deterministic
 encoding. The walk returns a fault to R, which raises it with the user’s
 call (`zu_raise_fault()`); status names map to classes in
 `zu_status_class` (`R/conditions.R`), and `tools/check-status-table`
-keeps the C table equal to `cbor.h`. Do not switch on
+keeps the C table equal to `cbor.h`. The build phase (`src/zu_build.c`)
+runs only after the check, takes container sizes from the check’s plan
+(never from length headers), and raises its own faults through
+`zu_raise_fault()` via `R_FindNamespace`, with the user’s call wrapped
+in [`quote()`](https://rdrr.io/r/base/substitute.html); `zu_mkchar()`
+there is the only place CBOR text becomes a CHARSXP. Do not switch on
 `CborValidateTagUse`: TinyCBOR’s table refuses valid tag 1 floats
 (design §3, §11). `README.md` is still the template (Stage 8).
 `src/init.c` registers every `.Call` entry point

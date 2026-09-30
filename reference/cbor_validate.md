@@ -1,7 +1,8 @@
 # Validate CBOR
 
 Checks that `x` holds well-formed, valid CBOR within the given limits,
-without building any R value. This is exactly the check `cbor_decode()`
+without building any R value. This is exactly the check
+[`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
 runs before it builds anything, so the two agree about the bytes; they
 disagree only where the bytes are valid but R cannot hold the value,
 such as a text string containing U+0000.

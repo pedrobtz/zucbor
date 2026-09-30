@@ -6,6 +6,9 @@
 <url><loc>https://pedrobtz.github.io/zucbor/authors.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/index.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/news/index.html</loc></url>
+<url><loc>https://pedrobtz.github.io/zucbor/reference/cbor-values.html</loc></url>
+<url><loc>https://pedrobtz.github.io/zucbor/reference/cbor_decode.html</loc></url>
+<url><loc>https://pedrobtz.github.io/zucbor/reference/cbor_read.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/reference/cbor_validate.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/reference/index.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/reference/zucbor-conditions.html</loc></url>

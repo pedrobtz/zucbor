@@ -31,6 +31,12 @@ class below inherits from `zucbor_error`.
 
   A map has the same key twice and `duplicate_keys = FALSE`.
 
+- `zucbor_unrepresentable`:
+
+  The input is valid CBOR but holds a value R cannot: a text string
+  containing U+0000 or longer than an R string, a tag number beyond
+  2^53, or an integer beyond 2^53 with `big_integers = "error"`.
+
 - `zucbor_limit_error`:
 
   A limit was reached. The subclasses `zucbor_depth_limit`,

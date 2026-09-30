@@ -318,7 +318,7 @@ The core. Everything after it relies on what this stage guarantees.
 - **`-Wshadow` found three shadowed locals** as soon as the lint gate of Stage 7 ran over these changes: two in Stage 5's rewritten exponent formatter and one in Stage 8's already-sorted check. The exponent formatter itself was rewritten because GCC's `-Wformat-truncation` could not prove an `snprintf()` safe, which R CMD check on Linux raises to a WARNING. R 4.6's own `R_ext/Boolean.h` fails `-Wpedantic` under gnu17, so the gate passes R's headers as `-isystem`.
 - **Stacked pull requests need retargeting before the base branch is deleted.** Merging Stage 3 with `--delete-branch` closed Stage 4's PR rather than retargeting it. The branch was restored, the PR reopened and pointed at `main`, and later merges retarget first.
 - Two vignettes ship: *Decoding untrusted CBOR*, and *COSE and WebAuthn*, which decodes a WebAuthn attestation object, its COSE_Key and an RFC 8392 CWT, and builds the `Sig_structure` a verifier signs over. A getting-started article is pkgdown-only. The README is rewritten, and states the GCC ≥ 11 requirement (decision 23).
-- `R CMD check --as-cran --run-donttest` is 0/0/0 at version 0.1.0, and `pkgdown::check_pkgdown()` finds no problems.
+- `R CMD check --as-cran --run-donttest` is 0/0/0 at version 0.1.0, and `pkgdown::check_pkgdown()` finds no problems. `main` then went back to `0.0.0.9000` until submission (Stage 9).
 
 ---
 
@@ -349,9 +349,9 @@ The core. Everything after it relies on what this stage guarantees.
 
 Writing it out found one criterion (7) that nothing checks mechanically, and one (9) met only as far as the nightly fuzzing has run. Both are stated as such rather than claimed.
 
-**What remains, and is yours:** tag `v0.1.0` on `main`, submit to CRAN (`devtools::submit_cran()`), and respond to the reviewers. `cran-comments.md` is ready.
+**What remains, and is yours:** `main` carries the development version `0.0.0.9000` (decided after Stage 8: the family keeps a `.9000` version on `main` between releases, and 0.1.0 is not released yet). At submission, set `Version: 0.1.0` and the `NEWS.md` heading to `# zucbor 0.1.0` in one commit, check once more, tag `v0.1.0` on `main`, submit to CRAN (`devtools::submit_cran()`), and respond to the reviewers. `cran-comments.md` is ready.
 
-**After acceptance:** bump `main` to `0.1.0.9000` with a `# zucbor 0.1.0.9000` NEWS heading. pkgdown's development mode (`mode: auto`) then builds the dev site into `/dev/` and leaves the released 0.1.0 docs at the root.
+**Site versions:** pkgdown's development mode (`mode: auto`) follows the version. At `0.0.0.9000` the site is built at the root and marked *unreleased*. At `0.1.0` it is a normal release site. After acceptance, bump `main` to `0.1.0.9000` with a `# zucbor 0.1.0.9000` NEWS heading: the dev site then builds into `/dev/`, and the released docs stay at the root.
 
 ---
 

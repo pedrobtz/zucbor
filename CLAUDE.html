@@ -47,7 +47,8 @@
 </ul></div>
 <div class="section level2">
 <h2 id="current-state">Current state<a class="anchor" aria-label="anchor" href="#current-state"></a></h2>
-<p>The repository is a bare usethis skeleton: <code>DESCRIPTION</code> still has placeholder Title/Description/Authors, <code>README.md</code> is the template, <code>tests/testthat/test-zucbor.R</code> is the template test, there is no R API, and TinyCBOR is not vendored yet. <code>src/init.c</code> registers the DLL with an empty <code>.Call</code> table; each new entry point goes in that table (<code>@useDynLib zucbor, .registration = TRUE</code> with <code>R_useDynamicSymbols(dll, FALSE)</code>, so an unregistered symbol is not callable).</p>
+<p>The plan is written: <a href=".agents/design.html">.agents/design.md</a> is the specification (numbered §1–§20: the R mapping in §6–§7, deterministic encoding §8, errors §10, limits §11, TinyCBOR vendoring and its build traps §13, open questions §19) and <a href=".agents/roadmap.html">.agents/roadmap.md</a> sequences it into Stages 0–9, each with a <strong>Status:</strong> line. Progress is tracked in the <code>v0.1.0</code> milestone: umbrella issue #4, with one <code>stage</code> sub-issue per stage (#5 for Stage 0 through #14 for Stage 9), each linking to its heading anchor. Never put status in a stage heading, since that changes the anchor. Read both before starting work; a decision in design §18 is settled unless the work shows it is wrong, and then the design changes in the same commit.</p>
+<p>The code is a bare usethis skeleton: <code>DESCRIPTION</code> still has placeholder Title/Description/Authors, <code>README.md</code> is the template, <code>tests/testthat/test-zucbor.R</code> is the template test, there is no R API, and TinyCBOR is not vendored yet. <code>src/init.c</code> registers the DLL with an empty <code>.Call</code> table; each new entry point goes in that table (<code>@useDynLib zucbor, .registration = TRUE</code> with <code>R_useDynamicSymbols(dll, FALSE)</code>, so an unregistered symbol is not callable).</p>
 <p><code>NEWS.md</code> still has the usethis heading <code># zucbor (development version)</code>. The siblings learned that R CMD check wants <code># zucbor &lt;version&gt;</code> once that is the only heading, or it emits a NEWS NOTE.</p>
 </div>
 <div class="section level2">
@@ -88,7 +89,7 @@
 <strong>Tests are self-sufficient</strong> (inputs built inside each <code>test_that()</code>), pass under <code>shuffle = TRUE</code>, stay serial (no <code>Config/testthat/parallel</code>, so gctorture/valgrind CI legs actually exercise the C code), and keep the suite to a few seconds for CRAN.</li>
 <li>
 <strong>Prose is en-GB</strong> (<code>Language: en-GB</code> in DESCRIPTION in the siblings), with domain terms in <code>inst/WORDLIST</code> via <code>spelling::update_wordlist()</code>.</li>
-<li>Design documents for the siblings live in <code>.agents/</code>; if one is written for zucbor, keep it there and keep its mapping tables in sync with the roxygen docs and the tests.</li>
+<li>Design documents live in <code>.agents/</code>. Keep design.md’s mapping tables in sync with the roxygen docs and the tests: they are the same table three times.</li>
 </ul></div>
 </div>
 

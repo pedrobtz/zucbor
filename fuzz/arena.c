@@ -16,7 +16,8 @@ void *zu_scratch(size_t n, size_t size)
 {
     if (size && n > (SIZE_MAX - sizeof(struct block)) / size)
         abort();
-    struct block *b = malloc(sizeof(struct block) + (n * size ? n * size : 1));
+    size_t bytes = n * size;
+    struct block *b = malloc(sizeof(struct block) + (bytes > 0 ? bytes : 1));
     if (!b)
         abort();
     b->next = blocks;

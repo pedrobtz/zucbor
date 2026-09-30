@@ -8,15 +8,14 @@
 # "tinycbor-version.h" to the project-owned headers that tools/update-tinycbor
 # writes, since the vendor tree holds only upstream's files.
 #
-# __USE_MINGW_ANSI_STDIO=1 makes Rtools' <inttypes.h> format macros and its
-# vsnprintf agree on C99 conventions, which cborpretty.c's PRIu64 formats
-# depend on (design section 13, trap 5). Inert off Windows.
+# __USE_MINGW_ANSI_STDIO=1 gives Rtools the C99 printf family, so the "%.*e"
+# the diagnostic printer formats floats with behaves as on every other
+# platform (design section 13, trap 5). Inert off Windows.
 PKG_CPPFLAGS = -Itinycbor -Ivendor/tinycbor -D__USE_MINGW_ANSI_STDIO=1
 
 TINYCBOR_OBJECTS = \
 	vendor/tinycbor/cborerrorstrings.o \
 	vendor/tinycbor/cborparser.o \
-	vendor/tinycbor/cborpretty.o \
 	vendor/tinycbor/cborvalidation.o
 
 OBJECTS = \

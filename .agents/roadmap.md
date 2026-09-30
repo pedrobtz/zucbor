@@ -208,16 +208,23 @@ The core. Everything after it relies on what this stage guarantees.
 
 ## Stage 5 — Diagnostic notation · S
 
-**Status:** not started.
+**Status:** complete.
 
 **Do**
-- `src/zu_diag.c`: the `CborStreamFunction` callback over `cborpretty.c`, formatting with `vsnprintf()` into `R_alloc` scratch, the result copied into one CHARSXP.
+- ~~`src/zu_diag.c`: the `CborStreamFunction` callback over `cborpretty.c`~~ a project printer instead (see below), formatting into `R_alloc` scratch, the result copied into one CHARSXP.
 - `cbor_diagnose()` runs the check phase first, so the pretty-printer never sees input the walk refused, and its output is bounded by a constant multiple of `max_size`.
 - `print` methods for the value classes use diagnostic notation where it is clearer.
 
 **Exit**
 - Appendix A's diagnostic column matches for every example, or each difference is listed with the reason (TinyCBOR's spelling of floats and indefinite lengths differs in places).
 - Windows output identical to Linux for 64-bit integers (trap 5).
+
+**What actually happened**
+
+- **TinyCBOR's printer could not meet the exit criterion,** so it was replaced. `cborpretty.c` always marks a float's width, as `1.5f16` or `1.5_1`, and has no flag to leave the mark out, while Appendix A writes `1.5`. `src/zu_diag.c` is a project printer over the checked input, about the same size as the callback glue it replaced. `cborpretty.c` left the vendored subset through `tools/update-tinycbor`, and trap 5 lost its main reason.
+- **79 of 81 Appendix A rows match the RFC's own column exactly.** That holds once numbers follow JavaScript's `toString()` rule plus `.0` (`0.00006103515625`, `5.960464477539063e-8`, `1.0e+300`) and text is ASCII with `\u` escapes and surrogate pairs (`"\ud800\udd51"`). The other two are bignums, whose value the table prints where the notation is the tag.
+- **A `printf` tie missed the shortest form of 2^-24.** 2^-24 is exactly `5.9604644775390625e-8`. At 16 significant digits `printf` rounds that tie to even, giving `…062`, which reads back as the neighbouring double. The shortest correct form is `…063`, so the first version printed 17 digits. Each precision now also tries both neighbours of `printf`'s answer. A test hook checks 20,000 random doubles and the edge cases read back bit-exactly through the C library's `strtod()`, since R's parser cannot be trusted for that on arm64 (Stage 3).
+- **The same printer names non-text keys** under `map_keys = "string"`, which retired Stage 3's float-key special case: one formatter, two uses.
 
 ---
 

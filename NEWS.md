@@ -25,4 +25,6 @@
   algorithm identifier written as `-7` stays an integer.
 * Decoding marks a one-element array with `I()` and keeps booleans apart
   from numbers, so that decoding and re-encoding gives back the same bytes.
+* `cbor_diagnose()` shows CBOR in RFC 8949 diagnostic notation, as the RFC's
+  own examples write it, after the same check as `cbor_validate()`.
 

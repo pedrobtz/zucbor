@@ -20,6 +20,8 @@ check <- function(x, ...) {
            zucbor_error = function(e) NULL)
   tryCatch(cbor_decode(x, map_keys = "map", big_integers = "error", ...),
            zucbor_error = function(e) NULL)
+  tryCatch(cbor_diagnose(x, sequence = TRUE, duplicate_keys = TRUE, ...),
+           zucbor_error = function(e) NULL)
 }
 
 a <- lapply(rfc8949_appendix_a()$hex, hex_raw)

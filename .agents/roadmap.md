@@ -324,11 +324,32 @@ The core. Everything after it relies on what this stage guarantees.
 
 ## Stage 9 — First CRAN release · S
 
-**Status:** not started.
+**Status:** open. The acceptance criteria are verified below; tagging `v0.1.0` and submitting to CRAN remain, deliberately a human step.
 
 - Verify each §20 acceptance criterion explicitly, in a table naming the test file, tool or CI job behind it. Writing it out is the check: `zuxml` found three criteria backed only by gates nothing else mentioned.
 - Tag `v0.1.0`, submit, respond. A human step.
 - 0.1.0, not 1.0.0: no consumer has used the API yet, and CRAN version numbers only go up.
+
+**Acceptance criteria (design §20), each with what verifies it** (2026-09-30):
+
+| # | Criterion | Verified by |
+|---|---|---|
+| 1 | Builds from source on Windows, macOS and Linux (release, devel, oldrel), no system library, CMake or autotools | `R-CMD-check.yaml` full profile: macOS, Windows and Ubuntu release, Ubuntu oldrel-1, R-devel containers (GCC 16; clang 23 with `-std=gnu23`), Ubuntu clang |
+| 2 | No R object is allocated before the check phase has passed | Structural: the check phase (`zu_walk.c`) compiles with no R headers at all (`-DZU_STANDALONE`, the fuzz build), so it *cannot* allocate an R object. Behavioural: `test-limits.R`, a nine-byte header claiming 2^64 − 1 elements and a `max_items` flood, both refused |
+| 3 | Every oversized, deep, truncated or malformed input fails through a classed `zucbor_error` with its status; none crashes, hangs or reaches R's allocator unbounded | `test-validate.R` (every Appendix F example; all 426 truncations of Appendix A), `test-conformance.R` (QCBOR's 122 vectors), `test-limits.R`; libFuzzer's `fuzz_check` under ASan and UBSan (`hardening.yaml`); `tools/sanitizer-exercise.R` in the ASan containers; `tools/run-mutation-check` |
+| 4 | Duplicate keys are rejected by value by default | `test-duplicate-keys.R`, every comparison class (`1` against `0x1801`, half against double `1.0`, chunked against definite strings); the `duplicate-keys` mutation case |
+| 5 | Encoding is deterministic: byte-identical across calls, sessions and platforms, and accepted by `cbor_validate(deterministic = TRUE)` | `test-encode.R`, a checked-in 645-byte encoding compared on every CI platform; `test-roundtrip.R`, 300 generated values each encoded twice and validated deterministic |
+| 6 | RFC 8949 Appendix A passes in both directions; every Appendix F example is rejected | `test-decode.R` (every Appendix A value, `identical()`), `test-roundtrip.R`, `test-diagnose.R` (the RFC's own diagnostic column, 79 of 81 exactly, the bignum rows explained), `test-validate.R`; `tools/run-conformance` over `cbor/test-vectors` itself |
+| 7 | Every documented mapping row has a test, and the three copies of each table agree | `test-decode.R`, `test-encode.R` and `test-classes.R` against the tables in `?cbor_decode`, `?cbor_encode` and design §6–§7. Agreement of the three copies is checked by review, not by a tool |
+| 8 | The §16 round-trip properties hold across the corpus | `test-roundtrip.R`; `test-conformance.R`: all 524 deterministic items in the COSE, CWT and WebAuthn corpora re-encode byte-exactly, including every signed or MACed structure |
+| 9 | Fuzzing under ASan and UBSan finds nothing in project code over a sustained run; the gate has been seen to fail on its canary | `tools/run-fuzz` requires `fuzz_canary` to crash first; runs of 2 minutes per pull request and 30 minutes nightly accumulate on a cached corpus. *Sustained* is met only as the nightly hours accrue; the local replay of 30,000 mutations was clean |
+| 10 | Vendored TinyCBOR provenance is recorded and `tools/verify-vendor` reproduces the tree | `src/vendor/PROVENANCE`, `inst/COPYRIGHTS`, `LICENSE.note`; `tools/verify-vendor` in `vendor.yaml`, seen to fail on a one-byte edit |
+| 11 | `R CMD check --as-cran` is clean on all three platforms, with no stdio or abort symbols in the shared object | CI matrix; `tools/check-symbols` in `vendor.yaml`, seen to fail on a planted `fprintf(stderr, ...)` |
+| 12 | The COSE, CWT and WebAuthn fixtures decode to the values their specifications state | `test-conformance.R`: the RFC 8392 claims set exactly; each WebAuthn credential key's `kty` and `alg` against the IANA registry; cose-wg's own diagnostic notation on 304 of 306 messages, the two others being errors in the examples |
+
+Writing it out found one criterion (7) that nothing checks mechanically, and one (9) met only as far as the nightly fuzzing has run. Both are stated as such rather than claimed.
+
+**What remains, and is yours:** tag `v0.1.0` on `main`, submit to CRAN (`devtools::submit_cran()`), and respond to the reviewers. `cran-comments.md` is ready.
 
 ---
 

@@ -36,3 +36,14 @@
   and
   [`cbor_bigint()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)
   represent the values R has no native type for.
+- [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  and
+  [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  write R values as CBOR in RFC 8949 core deterministic encoding:
+  identical R objects give identical bytes on every platform. Whole
+  doubles are written as integers, so a COSE algorithm identifier
+  written as `-7` stays an integer.
+- Decoding marks a one-element array with
+  [`I()`](https://rdrr.io/r/base/AsIs.html) and keeps booleans apart
+  from numbers, so that decoding and re-encoding gives back the same
+  bytes.

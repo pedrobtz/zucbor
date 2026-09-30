@@ -44,12 +44,14 @@ since that changes the anchor. Read both before starting work; a
 decision in design §18 is settled unless the work shows it is wrong, and
 then the design changes in the same commit.
 
-Stages 0–3 are done. TinyCBOR 7.0 is vendored in `src/vendor/tinycbor/`
+Stages 0–4 are done. TinyCBOR 7.0 is vendored in `src/vendor/tinycbor/`
 (byte-identical; `tools/verify-vendor` proves it, and the `vendor`
 workflow runs it), with the two headers upstream generates at CMake time
 written by `tools/update-tinycbor` into the project-owned
 `src/tinycbor/`. The R API so far is
 [`zucbor_info()`](https://pedrobtz.github.io/zucbor/reference/zucbor_info.md),
+[`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)/[`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+(project code in `src/zu_encode.c`, not TinyCBOR’s encoder: design §8),
 [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)/[`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md),
 [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)/[`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md),
 the value classes
@@ -70,10 +72,19 @@ runs only after the check, takes container sizes from the check’s plan
 (never from length headers), and raises its own faults through
 `zu_raise_fault()` via `R_FindNamespace`, with the user’s call wrapped
 in [`quote()`](https://rdrr.io/r/base/substitute.html); `zu_mkchar()`
-there is the only place CBOR text becomes a CHARSXP. Do not switch on
-`CborValidateTagUse`: TinyCBOR’s table refuses valid tag 1 floats
-(design §3, §11). `README.md` is still the template (Stage 8).
-`src/init.c` registers every `.Call` entry point
+there is the only place CBOR text becomes a CHARSXP. Three decoder rules
+exist to make `cbor_encode(cbor_decode(b))` equal `b` and are pinned by
+`test-roundtrip.R`: a one-element array decodes as an
+[`I()`](https://rdrr.io/r/base/AsIs.html) value, booleans do not join
+the numbers, and whole doubles encode as integers. Float literals in
+tests are built from bits (`f64()`, `f32()` in `helper-expect.R`), since
+R’s parser on macOS arm64 does not round every decimal literal
+correctly, and `-0` is made at run time, since the byte compiler folds
+the literal to `+0`. `zu_raise_fault()` builds its condition directly:
+[`do.call()`](https://rdrr.io/r/base/do.call.html) would evaluate the
+user’s call again. Do not switch on `CborValidateTagUse`: TinyCBOR’s
+table refuses valid tag 1 floats (design §3, §11). `README.md` is still
+the template (Stage 8). `src/init.c` registers every `.Call` entry point
 (`R_useDynamicSymbols(dll, FALSE)`, `R_forceSymbols(dll, TRUE)`), so an
 unregistered symbol is not callable and R code calls `.Call(zucbor_x)`,
 never `.Call("zucbor_x")`.

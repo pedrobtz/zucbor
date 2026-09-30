@@ -35,6 +35,9 @@ library(zucbor)
 - [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
   [`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
   : Decode CBOR
+- [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  : Encode R values as CBOR
 - [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
   [`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
   : Read CBOR from a file or connection

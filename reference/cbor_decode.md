@@ -119,16 +119,26 @@ item.
 | any other tag | `cbor_tag` |
 
 An array simplifies to an atomic vector only when its elements agree:
-logical, integer and double combine to the widest; text stays text; wide
-integers and integer-valued numbers combine to `cbor_bigint`; `POSIXct`
-and `Date` stay their class. `null` joins any of them as `NA`. Anything
-else – raw vectors, nested arrays and maps, tags, a mixture – is a list.
-`[]` is `logical(0)`.
+integers and floats combine to the wider; booleans stay logical, and
+text stays text; wide integers and integer-valued numbers combine to
+`cbor_bigint`; `POSIXct` and `Date` stay their class. `null` joins any
+of them as `NA`. Anything else – raw vectors, nested arrays and maps,
+tags, booleans with numbers, a mixture – is a list. `[]` is
+`logical(0)`.
+
+A one-element array that simplifies is marked with
+[`I()`](https://rdrr.io/r/base/AsIs.html), so that
+[`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+writes it back as an array rather than a single value: decoding and then
+encoding gives the same bytes for input in deterministic form, apart
+from the lossy conversions listed in
+[`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md).
 
 `null` and `undefined` both decode as missing: R has one missing value.
 
 ## See also
 
+[`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md),
 [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md),
 [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md),
 [cbor-values](https://pedrobtz.github.io/zucbor/reference/cbor-values.md),

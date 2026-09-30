@@ -9,8 +9,11 @@ class below inherits from `zucbor_error`.
 - `zucbor_invalid_argument`:
 
   An argument was unusable: an input that is not a raw vector, a flag
-  that is not `TRUE` or `FALSE`, or a limit that is not a positive whole
-  number within its range.
+  that is not `TRUE` or `FALSE`, a limit that is not a positive whole
+  number within its range, or a value
+  [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  cannot write as given, such as partial names or a string that is not
+  valid UTF-8.
 
 - `zucbor_parse_error`:
 
@@ -36,6 +39,12 @@ class below inherits from `zucbor_error`.
   The input is valid CBOR but holds a value R cannot: a text string
   containing U+0000 or longer than an R string, a tag number beyond
   2^53, or an integer beyond 2^53 with `big_integers = "error"`.
+
+- `zucbor_unsupported_type`:
+
+  [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  was given an R value with no CBOR form, such as a function, an
+  environment, `POSIXlt` or a data frame.
 
 - `zucbor_limit_error`:
 

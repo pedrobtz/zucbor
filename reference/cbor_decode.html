@@ -143,16 +143,21 @@ element per item.</p>
     <h2 id="cbor-to-r">CBOR to R<a class="anchor" aria-label="anchor" href="#cbor-to-r"></a></h2>
 
 <table class="table table"><tr><td>CBOR</td><td>R</td></tr><tr><td>integer</td><td><code>integer</code> if it fits, else <code>double</code> up to 2^53, else by <code>big_integers</code></td></tr><tr><td>float (half, single, double)</td><td><code>double</code>, exactly</td></tr><tr><td><code>false</code> / <code>true</code></td><td><code>logical</code></td></tr><tr><td><code>null</code>, <code>undefined</code></td><td><code>NULL</code>, or <code>NA</code> inside an atomic vector</td></tr><tr><td>byte string</td><td><code>raw</code></td></tr><tr><td>text string</td><td><code>character</code>, UTF-8</td></tr><tr><td>other simple value</td><td><code>cbor_simple</code></td></tr><tr><td>array</td><td>atomic vector when the elements agree, else <code>list</code></td></tr><tr><td>map with non-empty, unique text keys</td><td>named <code>list</code></td></tr><tr><td>any other map</td><td><code>cbor_map</code> (by <code>map_keys</code>)</td></tr><tr><td>tag 0 (date/time text), tag 1 (epoch)</td><td><code>POSIXct</code>, UTC</td></tr><tr><td>tag 2, 3 (bignum)</td><td>the integer it holds, as for an integer; payloads over 128 bytes stay <code>cbor_tag</code></td></tr><tr><td>tag 100 (days), tag 1004 (full date)</td><td><code>Date</code></td></tr><tr><td>tag 55799 (self-describe)</td><td>its content</td></tr><tr><td>any other tag</td><td><code>cbor_tag</code></td></tr></table><p>An array simplifies to an atomic vector only when its elements agree:
-logical, integer and double combine to the widest; text stays text; wide
-integers and integer-valued numbers combine to <code>cbor_bigint</code>; <code>POSIXct</code>
-and <code>Date</code> stay their class. <code>null</code> joins any of them as <code>NA</code>. Anything
-else – raw vectors, nested arrays and maps, tags, a mixture – is a list.
-<code>[]</code> is <code>logical(0)</code>.</p>
+integers and floats combine to the wider; booleans stay logical, and text
+stays text; wide integers and integer-valued numbers combine to
+<code>cbor_bigint</code>; <code>POSIXct</code> and <code>Date</code> stay their class. <code>null</code> joins any of
+them as <code>NA</code>. Anything else – raw vectors, nested arrays and maps, tags,
+booleans with numbers, a mixture – is a list. <code>[]</code> is <code>logical(0)</code>.</p>
+<p>A one-element array that simplifies is marked with <code><a href="https://rdrr.io/r/base/AsIs.html" class="external-link">I()</a></code>, so that
+<code><a href="cbor_encode.html">cbor_encode()</a></code> writes it back as an array rather than a single value:
+decoding and then encoding gives the same bytes for input in
+deterministic form, apart from the lossy conversions listed in
+<code><a href="cbor_encode.html">cbor_encode()</a></code>.</p>
 <p><code>null</code> and <code>undefined</code> both decode as missing: R has one missing value.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="cbor_validate.html">cbor_validate()</a></code>, <code><a href="cbor_read.html">cbor_read()</a></code>, <a href="cbor-values.html">cbor-values</a>,
+    <div class="dont-index"><p><code><a href="cbor_encode.html">cbor_encode()</a></code>, <code><a href="cbor_validate.html">cbor_validate()</a></code>, <code><a href="cbor_read.html">cbor_read()</a></code>, <a href="cbor-values.html">cbor-values</a>,
 <a href="zucbor-conditions.html">zucbor-conditions</a>.</p></div>
     </div>
 

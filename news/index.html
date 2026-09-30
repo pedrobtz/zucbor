@@ -44,6 +44,9 @@
 <code><a href="../reference/cbor_decode.html">cbor_decode()</a></code> and <code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code> turn CBOR into ordinary R values, after the same whole-input check <code><a href="../reference/cbor_validate.html">cbor_validate()</a></code> runs. Arrays simplify to atomic vectors when their elements agree; maps with text keys become named lists; integers stay exact (<code>cbor_bigint</code> beyond 2^53); dates and times become <code>POSIXct</code> and <code>Date</code>. <code><a href="../reference/cbor_read.html">cbor_read()</a></code> and <code><a href="../reference/cbor_read.html">cbor_read_seq()</a></code> read from a file, URL or connection, never more than <code>max_size + 1</code> bytes.</li>
 <li>
 <code><a href="../reference/cbor-values.html">cbor_map()</a></code>, <code><a href="../reference/cbor-values.html">cbor_tag()</a></code>, <code><a href="../reference/cbor-values.html">cbor_simple()</a></code> and <code><a href="../reference/cbor-values.html">cbor_bigint()</a></code> represent the values R has no native type for.</li>
+<li>
+<code><a href="../reference/cbor_encode.html">cbor_encode()</a></code> and <code><a href="../reference/cbor_encode.html">cbor_encode_seq()</a></code> write R values as CBOR in RFC 8949 core deterministic encoding: identical R objects give identical bytes on every platform. Whole doubles are written as integers, so a COSE algorithm identifier written as <code>-7</code> stays an integer.</li>
+<li>Decoding marks a one-element array with <code><a href="https://rdrr.io/r/base/AsIs.html" class="external-link">I()</a></code> and keeps booleans apart from numbers, so that decoding and re-encoding gives back the same bytes.</li>
 </ul></div>
   </main></div>
 

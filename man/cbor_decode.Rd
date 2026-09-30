@@ -99,11 +99,17 @@ a length header cannot make R allocate for data the input does not hold.
 
 
 An array simplifies to an atomic vector only when its elements agree:
-logical, integer and double combine to the widest; text stays text; wide
-integers and integer-valued numbers combine to \code{cbor_bigint}; \code{POSIXct}
-and \code{Date} stay their class. \code{null} joins any of them as \code{NA}. Anything
-else -- raw vectors, nested arrays and maps, tags, a mixture -- is a list.
-\verb{[]} is \code{logical(0)}.
+integers and floats combine to the wider; booleans stay logical, and text
+stays text; wide integers and integer-valued numbers combine to
+\code{cbor_bigint}; \code{POSIXct} and \code{Date} stay their class. \code{null} joins any of
+them as \code{NA}. Anything else -- raw vectors, nested arrays and maps, tags,
+booleans with numbers, a mixture -- is a list. \verb{[]} is \code{logical(0)}.
+
+A one-element array that simplifies is marked with \code{\link[=I]{I()}}, so that
+\code{\link[=cbor_encode]{cbor_encode()}} writes it back as an array rather than a single value:
+decoding and then encoding gives the same bytes for input in
+deterministic form, apart from the lossy conversions listed in
+\code{\link[=cbor_encode]{cbor_encode()}}.
 
 \code{null} and \code{undefined} both decode as missing: R has one missing value.
 }
@@ -119,6 +125,6 @@ hdr
 cbor_decode_seq(as.raw(c(0x01, 0x61, 0x61)))          # 1, then "a"
 }
 \seealso{
-\code{\link[=cbor_validate]{cbor_validate()}}, \code{\link[=cbor_read]{cbor_read()}}, \link{cbor-values},
+\code{\link[=cbor_encode]{cbor_encode()}}, \code{\link[=cbor_validate]{cbor_validate()}}, \code{\link[=cbor_read]{cbor_read()}}, \link{cbor-values},
 \link{zucbor-conditions}.
 }

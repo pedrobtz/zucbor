@@ -9,8 +9,10 @@
 #'
 #' \describe{
 #'   \item{`zucbor_invalid_argument`}{An argument was unusable: an input that
-#'     is not a raw vector, a flag that is not `TRUE` or `FALSE`, or a limit
-#'     that is not a positive whole number within its range.}
+#'     is not a raw vector, a flag that is not `TRUE` or `FALSE`, a limit
+#'     that is not a positive whole number within its range, or a value
+#'     [cbor_encode()] cannot write as given, such as partial names or a
+#'     string that is not valid UTF-8.}
 #'   \item{`zucbor_parse_error`}{The input is not well-formed CBOR: it ends
 #'     early, uses a reserved encoding, has a misplaced "break", or has bytes
 #'     after the item.}
@@ -25,6 +27,9 @@
 #'     value R cannot: a text string containing U+0000 or longer than an R
 #'     string, a tag number beyond 2^53, or an integer beyond 2^53 with
 #'     `big_integers = "error"`.}
+#'   \item{`zucbor_unsupported_type`}{[cbor_encode()] was given an R value
+#'     with no CBOR form, such as a function, an environment, `POSIXlt` or a
+#'     data frame.}
 #'   \item{`zucbor_limit_error`}{A limit was reached. The subclasses
 #'     `zucbor_depth_limit`, `zucbor_size_limit` and `zucbor_item_limit` name
 #'     which one.}
@@ -105,6 +110,8 @@ zu_status_class <- local({
     ZU_ERR_STRING_TOO_LONG = "zucbor_unrepresentable",
     ZU_ERR_BIG_INTEGER = "zucbor_unrepresentable",
     ZU_ERR_TAG_TOO_LARGE = "zucbor_unrepresentable",
+    ZU_ERR_UNSUPPORTED_TYPE = "zucbor_unsupported_type",
+    ZU_ERR_INVALID_VALUE = "zucbor_invalid_argument",
     CborUnknownError = bare,
     CborErrorIO = bare,
     CborErrorTooManyItems = bare,
@@ -131,6 +138,8 @@ zu_fault_message <- function(fault, class) {
                                   if (identical(fault$status, "ZU_ERR_KEY_COLLISION"))
                                     " once keys are stringified" else ""),
     zucbor_unrepresentable = paste0("CBOR value R cannot hold", at, detail),
+    zucbor_unsupported_type = paste0("cannot encode `x`", detail),
+    zucbor_invalid_argument = paste0("cannot encode `x`", detail),
     zucbor_depth_limit = paste0("CBOR nested deeper than max_depth = ", fault$limit_value, at),
     zucbor_item_limit = paste0("CBOR has more than max_items = ",
                                format(fault$limit_value, scientific = FALSE), " data items", at),
@@ -144,7 +153,11 @@ zu_fault_message <- function(fault, class) {
 zu_raise_fault <- function(fault, call = NULL) {
   class <- zu_status_class[[fault$status]]
   if (is.null(class)) class <- character()
-  zu_abort(class, zu_fault_message(fault, class),
-           offset = fault$offset, status = fault$status,
-           limit = fault$limit, limit_value = fault$limit_value, call = call)
+  # Built directly, not through do.call(): that would evaluate `call`, the
+  # user's own expression, a second time.
+  cond <- list(message = zu_fault_message(fault, class), call = call,
+               offset = fault$offset, status = fault$status,
+               limit = fault$limit, limit_value = fault$limit_value)
+  if ("zucbor_invalid_argument" %in% class) cond$arg <- "x"
+  stop(structure(class = c(class, "zucbor_error", "error", "condition"), cond))
 }

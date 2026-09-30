@@ -79,8 +79,9 @@ CMake time (tinycbor-version.h, tinycbor-export.h) are written by
 tools/update-tinycbor into the project-owned src/tinycbor/, so this tree
 stays verifiable with tools/verify-vendor.
 
-Only the parser, encoder, validator, diagnostic printer and error strings
-are imported. CBOR-to-JSON, the stdio printer, open_memstream, the
+Only the parser, validator, diagnostic printer and error strings are
+imported. The encoder is not: zucbor encodes in project code (design
+section 8). CBOR-to-JSON, the stdio printer, open_memstream, the
 allocating string helpers, the float helpers, CMake, the tests, the examples
 and the tools are deliberately excluded (.agents/design.md section 13).
 

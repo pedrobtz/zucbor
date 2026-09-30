@@ -134,3 +134,38 @@ int zu_parse_rfc3339(const char *s, size_t len, double *secs)
             - (double) offset + frac;
     return 0;
 }
+
+/* "YYYY-MM-DD" for days since the epoch, into buf (at least 11 bytes).
+ * Nonzero when the year is outside 0000-9999, which RFC 3339 cannot write;
+ * the encoder then uses tag 100. Hinnant's civil_from_days. */
+int zu_format_full_date(double days, char *buf)
+{
+    if (!(days > -1e9 && days < 1e9))
+        return 1;
+    long z = (long) days + 719468;
+    long era = (z >= 0 ? z : z - 146096) / 146097;
+    long doe = z - era * 146097;
+    long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    long y = yoe + era * 400;
+    long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    long mp = (5 * doy + 2) / 153;
+    long d = doy - (153 * mp + 2) / 5 + 1;
+    long m = mp < 10 ? mp + 3 : mp - 9;
+    y += m <= 2;
+    if (y < 0 || y > 9999)
+        return 1;
+    long parts[3] = {y, m, d};
+    int widths[3] = {4, 2, 2};
+    size_t k = 0;
+    for (int p = 0; p < 3; p++) {
+        if (p)
+            buf[k++] = '-';
+        for (int i = widths[p] - 1; i >= 0; i--) {
+            buf[k + (size_t) i] = (char)('0' + parts[p] % 10);
+            parts[p] /= 10;
+        }
+        k += (size_t) widths[p];
+    }
+    buf[k] = '\0';
+    return 0;
+}

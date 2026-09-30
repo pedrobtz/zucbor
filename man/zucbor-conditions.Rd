@@ -11,8 +11,10 @@ class below inherits from \code{zucbor_error}.
 \details{
 \describe{
 \item{\code{zucbor_invalid_argument}}{An argument was unusable: an input that
-is not a raw vector, a flag that is not \code{TRUE} or \code{FALSE}, or a limit
-that is not a positive whole number within its range.}
+is not a raw vector, a flag that is not \code{TRUE} or \code{FALSE}, a limit
+that is not a positive whole number within its range, or a value
+\code{\link[=cbor_encode]{cbor_encode()}} cannot write as given, such as partial names or a
+string that is not valid UTF-8.}
 \item{\code{zucbor_parse_error}}{The input is not well-formed CBOR: it ends
 early, uses a reserved encoding, has a misplaced "break", or has bytes
 after the item.}
@@ -27,6 +29,9 @@ is not in RFC 8949 core deterministic encoding.}
 value R cannot: a text string containing U+0000 or longer than an R
 string, a tag number beyond 2^53, or an integer beyond 2^53 with
 \code{big_integers = "error"}.}
+\item{\code{zucbor_unsupported_type}}{\code{\link[=cbor_encode]{cbor_encode()}} was given an R value
+with no CBOR form, such as a function, an environment, \code{POSIXlt} or a
+data frame.}
 \item{\code{zucbor_limit_error}}{A limit was reached. The subclasses
 \code{zucbor_depth_limit}, \code{zucbor_size_limit} and \code{zucbor_item_limit} name
 which one.}

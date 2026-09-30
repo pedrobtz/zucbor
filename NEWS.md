@@ -19,4 +19,10 @@
   a file, URL or connection, never more than `max_size + 1` bytes.
 * `cbor_map()`, `cbor_tag()`, `cbor_simple()` and `cbor_bigint()` represent
   the values R has no native type for.
+* `cbor_encode()` and `cbor_encode_seq()` write R values as CBOR in RFC 8949
+  core deterministic encoding: identical R objects give identical bytes on
+  every platform. Whole doubles are written as integers, so a COSE
+  algorithm identifier written as `-7` stays an integer.
+* Decoding marks a one-element array with `I()` and keeps booleans apart
+  from numbers, so that decoding and re-encoding gives back the same bytes.
 

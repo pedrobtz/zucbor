@@ -1,0 +1,70 @@
+# Roadmap Stage 7: the gates that keep the C boundary honest. Each was seen
+# to fail on a planted defect before it was trusted (design section 16).
+#
+#   lint      project C warning-free under -Wall -Wextra -Wpedantic -Werror
+#   mutation  every security guard in the check phase is load-bearing
+#   network   no test touches the network
+#   fuzz      libFuzzer over the R-free check phase, canary first; the
+#             grown corpus is cached between runs, so fuzzing accumulates:
+#             2 minutes per pull-request push, 30 minutes nightly
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+name: hardening
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    name: lint, mutation, no network
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - run: tools/run-lint
+      - run: tools/run-mutation-check
+      - run: tools/check-no-network
+
+  fuzz:
+    runs-on: ubuntu-latest
+    name: fuzz (check phase)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+      - name: Restore the corpus
+        uses: actions/cache/restore@v4
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: fuzz-corpus-
+      - name: Fuzz
+        env:
+          FUZZ_CC: clang
+        run: tools/run-fuzz ${{ github.event_name == 'schedule' && 1800 || 120 }}
+      - name: Save the corpus
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-${{ github.run_id }}
+      - name: Upload findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts
+          if-no-files-found: ignore

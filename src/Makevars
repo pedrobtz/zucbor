@@ -27,7 +27,9 @@ OBJECTS = \
 	zu_encode.o \
 	zu_float.o \
 	zu_info.o \
+	zu_status.o \
 	zu_time.o \
+	zu_validate.o \
 	zu_walk.o \
 	zu_tinycbor_check.o \
 	$(TINYCBOR_OBJECTS)

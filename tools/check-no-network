@@ -1,0 +1,11 @@
+#!/bin/sh
+# No test may touch the network (design section 16): asserted, not assumed.
+# Fails on any call in tests/ that opens a URL or a socket.
+set -eu
+hits=$(grep -rnE 'url\(|download\.file|curl::|httr|socketConnection|make\.socket|readLines\([^)]*https?:' tests/ || true)
+if [ -n "$hits" ]; then
+  echo "FAIL: tests appear to use the network:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
+echo "==> no network use in tests/"

@@ -66,3 +66,10 @@ mixed_value <- function() {
     empty_map = structure(list(), names = character())
   )
 }
+
+# The condition class each input raises, or "ok": for checking hundreds of
+# inputs with one expectation, since testthat's per-expectation overhead
+# dominates the suite's run time otherwise.
+fault_class <- function(inputs, f = function(x) cbor_validate(x, error = TRUE)) {
+  vapply(inputs, function(x) tryCatch({f(x); "ok"}, error = function(e) class(e)[1]), "")
+}

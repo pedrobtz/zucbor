@@ -6,22 +6,21 @@ test_that("every RFC 8949 Appendix A example validates", {
 
 test_that("every RFC 8949 Appendix F example is a parse error", {
   f <- unlist(rfc8949_not_well_formed(), use.names = FALSE)
-  for (h in f) {
-    expect_error(cbor_validate(hex_raw(h), error = TRUE),
-                 class = "zucbor_parse_error", info = h)
-    expect_false(cbor_validate(hex_raw(h)), info = h)
-  }
+  got <- fault_class(lapply(f, hex_raw))
+  expect_identical(unname(got), rep("zucbor_parse_error", length(f)),
+                   info = paste(f[got != "zucbor_parse_error"], collapse = " | "))
+  expect_false(any(vapply(f, function(h) cbor_validate(hex_raw(h)), NA)))
 })
 
 test_that("every truncation of every Appendix A example is a parse error", {
   a <- rfc8949_appendix_a()
-  for (h in a$hex) {
+  cuts <- unlist(lapply(a$hex, function(h) {
     bytes <- hex_raw(h)
-    for (n in seq_len(length(bytes) - 1L)) {
-      expect_error(cbor_validate(bytes[seq_len(n)], error = TRUE),
-                   class = "zucbor_parse_error", info = sprintf("%s cut to %d", h, n))
-    }
-  }
+    lapply(seq_len(length(bytes) - 1L), function(n) bytes[seq_len(n)])
+  }), recursive = FALSE)
+  expect_length(cuts, 426L)
+  got <- fault_class(cuts)
+  expect_identical(unname(got), rep("zucbor_parse_error", length(cuts)))
 })
 
 test_that("empty input is not an item, but is an empty sequence", {

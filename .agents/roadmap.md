@@ -230,7 +230,7 @@ The core. Everything after it relies on what this stage guarantees.
 
 ## Stage 6 — Conformance and real-world corpus · M
 
-**Status:** not started.
+**Status:** complete.
 
 **Do**
 - `tools/run-conformance` against `cbor/test-vectors` at a pinned commit: decode every vector; for each with `roundtrip: true`, encode and compare bytes. A baseline per category of known difference, attributed by rule, not by a list of file names, so a new deviation cannot hide in a known one (`zuxml`'s W3C harness).
@@ -240,6 +240,22 @@ The core. Everything after it relies on what this stage guarantees.
 **Exit**
 - Conformance run at zero unexplained deviations, and seen to fail when a baseline is lowered or an entry removed.
 - Every fixture decodes; every deterministic fixture round-trips byte-for-byte.
+
+**What actually happened**
+
+- **The corpus is larger than planned.** On the user's question of which suites would harden testing, QCBOR's 122 not-well-formed vectors (BSD-3-Clause) were added to the plan, and all of `cose-wg/Examples` was taken instead of a sample. That is 306 messages plus the 345 structures their signatures and MACs cover. `tools/update-fixtures` regenerates every fixture from its pinned source in about three seconds, so the fixtures are data with provenance, not hand-copied hex.
+- **Results.**
+  - All 122 QCBOR vectors are `zucbor_parse_error`.
+  - All 651 COSE items validate.
+  - **Every one of the 345 signed or MACed structures re-encodes to exactly the bytes that were signed.** That is the property COSE verification depends on, and the strongest real-world evidence for the deterministic encoder.
+  - Of the 306 messages, the 179 in deterministic form round-trip exactly. The other 127 all fail on one thing, map keys out of bytewise order, and those are exactly the ones that do not round-trip. "Deterministic ⇒ fixed point" held across 524 real items without exception.
+  - All 15 WebAuthn attestation objects round-trip, and each credential key's COSE `kty` and `alg` match the IANA registry for its section, from ES256 (−7) to Ed448 (−53).
+  - The CWT claims set decodes to exactly the claims RFC 8392 prints.
+- **Our diagnostic notation matches cose-wg's on 304 of 306 messages.** The two exceptions are errors in cose-wg's own examples: `x509-examples/signed-01` and `-02` show the `kid` as a byte string in their notation, while their hex encodes it as text. The hex is what was signed, and COSE requires a byte string, so it is the hex that is wrong. `fixtures/README.md` records it.
+- **QCBOR's test data has a latent overread.** Two vectors declare 6 bytes and list 4, so QCBOR's own test reads 2 bytes past its array, and a third declares 2 and lists 4. The fixture keeps what QCBOR's test actually reads. Neither upstream has been told yet.
+- **The suite had grown to 20 s,** mostly testthat's per-expectation overhead on thousands of `expect_error()` calls. Bulk checks now compute every outcome, then assert once with the failing inputs named (`fault_class()`). The suite is back to about 7 s.
+- **gctorture had stalled on Stage 3's PR.** The interrupt test's 4-million-item decode means hours of collections under `gctorture2(step = 100)`, and it tests an unwind path, not PROTECT discipline. The two allocation-heavy tests skip when `ZUCBOR_SKIP_HEAVY` is set, which the gctorture job sets, as r-actions advises. gctorture now runs at the quick step on pull requests and at step 100 after merge.
+- `tools/run-conformance` runs `cbor/test-vectors` itself with rule-attributed causes and baselines. It was seen to fail with a baseline lowered and with a cause's rule removed. It runs as the `conformance` job in `native-checks.yaml`.
 
 ---
 

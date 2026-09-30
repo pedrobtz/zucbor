@@ -1,0 +1,26 @@
+#!/bin/sh
+# Conformance against third-party data (roadmap Stage 6). Run from the package
+# root against an installed zucbor; needs jsonlite and network access.
+#
+#  1. Every fixture in tests/testthat/fixtures/ must equal a fresh
+#     regeneration from its pinned source (tools/update-fixtures).
+#  2. tools/conformance.R runs cbor/test-vectors' appendix_a.json itself,
+#     attributing every difference to a named cause by rule.
+set -eu
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+fail=0
+
+tools/update-fixtures "$WORK/fixtures" > /dev/null
+for f in qcbor-not-well-formed.txt cose-wg-examples.tsv spec-examples.tsv; do
+  if cmp -s "$WORK/fixtures/$f" "tests/testthat/fixtures/$f"; then
+    echo "==> fixture $f matches its source"
+  else
+    echo "FAIL: fixture $f differs from a fresh regeneration" >&2
+    fail=1
+  fi
+done
+
+Rscript tools/conformance.R || fail=1
+exit $fail

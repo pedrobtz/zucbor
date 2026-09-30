@@ -668,8 +668,10 @@ Every row of the §6 and §7 tables has a test. The tables in the roxygen docs, 
 
 - **RFC 8949 Appendix A**, every example, both directions: decode the hex and compare with the expected R value; encode the value and, where the example is in deterministic form, compare bytes.
 - **RFC 8949 Appendix F**, every not-well-formed example must be `zucbor_parse_error`.
-- `cbor/test-vectors` (`appendix_a.json`) at a pinned commit, through `tools/run-conformance`, outside the suite.
-- Real structures, as small local fixtures: RFC 9052 / `cose-wg/Examples` messages, RFC 8392 CWT examples, WebAuthn Level 3 attestation objects, and SenML packs from RFC 8428.
+- `cbor/test-vectors` (`appendix_a.json`) at a pinned commit, through `tools/run-conformance`, outside the suite, with every difference attributed to a named cause by rule and each cause held to a baseline count.
+- QCBOR's `not_well_formed_cbor.h`, all 122 vectors, as must-reject cases: a superset of Appendix F from the author who contributed most of it.
+- Real structures, as local fixtures regenerated from pinned sources by `tools/update-fixtures` (`tests/testthat/fixtures/README.md` lists sources and licences): all 306 `cose-wg/Examples` messages and their 345 `ToBeSign` / `ToMac` / `AAD` structures, the RFC 8392 CWT examples, the 15 WebAuthn Level 3 attestation objects, and the RFC 8428 SenML pack. The structures a signature or MAC covers must re-encode to exactly the signed bytes.
+- `tools/run-conformance` fails if any committed fixture differs from a fresh regeneration from its source.
 
 ### Properties
 

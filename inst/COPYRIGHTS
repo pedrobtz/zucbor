@@ -26,3 +26,21 @@ The files src/tinycbor/tinycbor-version.h and src/tinycbor/tinycbor-export.h
 are written by zucbor's tools/update-tinycbor to stand in for the headers
 TinyCBOR's CMake build generates from its templates; they are part of
 zucbor.
+
+
+Test fixtures (tests/testthat/fixtures)
+=======================================
+
+Third-party CBOR test data, used only by the test suite; sources, pinned
+versions and licences are listed in tests/testthat/fixtures/README.md.
+
+- qcbor-not-well-formed.txt: derived from QCBOR,
+  Copyright (c) 2019, Laurence Lundblade. BSD-3-Clause; the licence text is
+  in tests/testthat/fixtures/QCBOR-LICENSE.
+- cose-wg-examples.tsv: from cose-wg/Examples, released under the
+  Unlicense (public domain).
+- spec-examples.tsv: examples from RFC 8392 and RFC 8428 (Copyright (c) IETF
+  Trust and the persons identified as the document authors; code components
+  under the Trust Legal Provisions' BSD-style licence) and the WebAuthn
+  Level 3 test vectors (Copyright (c) W3C; W3C Software and Document
+  License).

@@ -75,4 +75,23 @@ for (n in c(0L, 1L, 8L, 9L, 127L, 128L, 129L, 300L)) {
   check(c(as.raw(0xc2), as.raw(c(0x59, n %/% 256L, n %% 256L)), payload))
 }
 
+# The encoder: every decoded value encodes, and the result decodes again.
+# Hostile R values: deep nesting past the limit, invalid names, bad classes.
+for (x in a) {
+  v <- tryCatch(cbor_decode(x), zucbor_error = function(e) NULL)
+  b <- cbor_encode(v)
+  stopifnot(identical(cbor_encode(cbor_decode(b)), b))
+  cbor_encode(v, auto_unbox = FALSE, self_describe = TRUE)
+}
+deep <- 1L
+for (i in 1:2000) deep <- list(deep)
+for (x in list(deep, list(a = 1, 2), c(a = 1, a = 2), cbor_map(list(1L, 1), list(0, 0)),
+               structure("01", class = "cbor_bigint"), structure(20L, class = "cbor_simple"),
+               structure(list(tag = -1, value = 1), class = "cbor_tag"), globalenv(), 1i,
+               as.POSIXlt("2024-01-01", tz = "UTC"), data.frame(a = 1))) {
+  tryCatch(cbor_encode(x), zucbor_error = function(e) NULL)
+}
+big <- lapply(1:5000, function(i) list(k = i, v = as.character(i)))
+invisible(cbor_encode(stats::setNames(big, sprintf("k%05d", sample.int(5000)))))
+
 cat("sanitizer exercise complete\n")

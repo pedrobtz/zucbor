@@ -14,7 +14,6 @@
 PKG_CPPFLAGS = -Itinycbor -Ivendor/tinycbor -D__USE_MINGW_ANSI_STDIO=1
 
 TINYCBOR_OBJECTS = \
-	vendor/tinycbor/cborencoder.o \
 	vendor/tinycbor/cborerrorstrings.o \
 	vendor/tinycbor/cborparser.o \
 	vendor/tinycbor/cborpretty.o \
@@ -26,6 +25,7 @@ OBJECTS = \
 	zu_build.o \
 	zu_cond.o \
 	zu_diag.o \
+	zu_encode.o \
 	zu_float.o \
 	zu_info.o \
 	zu_time.o \

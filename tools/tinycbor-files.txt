@@ -2,7 +2,6 @@
 # release tarball. Everything listed is copied byte-for-byte; nothing else is.
 # See .agents/design.md section 13 for why each excluded file is excluded.
 src/cbor.h
-src/cborencoder.c
 src/cborerrorstrings.c
 src/cborparser.c
 src/cborpretty.c

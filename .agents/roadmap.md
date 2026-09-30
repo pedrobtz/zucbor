@@ -173,7 +173,7 @@ The core. Everything after it relies on what this stage guarantees.
 
 ## Stage 4 — Deterministic encoder · L
 
-**Status:** not started.
+**Status:** complete.
 
 **Do**
 - `src/zu_encode.c`: measure pass into a zero-length buffer, one `RAWSXP` of exact size, write pass (§8). Depth charged exactly as the decoder charges it.
@@ -189,6 +189,20 @@ The core. Everything after it relies on what this stage guarantees.
 - A checked-in hex fixture of a large mixed value is byte-identical on every CI platform — determinism across machines, not just across calls.
 - `cbor_encode()` at `max_depth = d` never produces output `cbor_decode(max_depth = d)` refuses, at `d` and `d + 1`, including tags and nested maps.
 - `gctorture(TRUE)` clean; `rchk` clean.
+
+**What actually happened**
+
+- **The encoder is project code, not TinyCBOR's.** Deterministic encoding needs each map's keys encoded, sorted and spliced into the output. TinyCBOR's encoder has no call that appends pre-encoded bytes, and `cbor_encoder_close_container()` checks item counts, so splicing would fail with `TooFewItems`. `src/zu_encode.c` is one routine run twice: measure, then write into one exactly sized `RAWSXP`. `cborencoder.c` left the vendored subset through `tools/update-tinycbor`, and the vendor guard now requires only `PROVENANCE`, since `test-info.R`'s literal already fails on a version bump.
+- **The round-trip property test changed the decoder twice.** Generated values that must satisfy `cbor_encode(cbor_decode(b)) == b` found two things the design had wrong:
+  - *One-element arrays.* `[x]` decoded to a length-one vector, which `auto_unbox` then wrote as a bare `x`. Every one-element array lost its brackets, which would corrupt a WebAuthn `x5c` holding one certificate. One-element arrays now decode as `I()` values, the marker the encoder already honours.
+  - *Booleans.* The lattice borrowed from `zujson` let logical join the numbers, so `[false, 1.5]` became `c(0, 1.5)` and re-encoded as `[0, 1.5]`. Logical is now a kind of its own.
+
+  Both are design §6.3 decisions 25 and 26. Neither would have been found by testing the encoder against fixed examples.
+- **R's byte-code compiler folds the literal `-0` to `+0`** (R 4.5.2): `compiler::cmpfun(function() 1/c(0, -0))()` is `Inf Inf`. The cross-platform fixture's negative zero had silently become positive zero inside a JIT-compiled helper, and the encoder was blamed until `1/v` was checked. Test values make `-0` at run time (`neg_zero()`).
+- **All 65,536 half-precision patterns round-trip** through `zu_half_to_double()` and the encoder's width selection (`zucbor_half_roundtrip()`, a test hook). Float width selection is project code, as §8 planned.
+- **Depth is charged identically in both directions.** A test that nests six kinds of leaf (scalar, `POSIXct`, tag, named vector, `cbor_map`, bignum) at depths 1–4 checks that `cbor_encode(max_depth = 4)` succeeds exactly when `cbor_validate(max_depth = 4)` accepts the result. Tags written for `POSIXct`, `Date` and wide bignums count as levels, which the first version of the encoder forgot.
+- **`zu_raise_fault()` must not use `do.call()`.** It was briefly rewritten with `do.call()` to add an `arg` field, and `do.call()` evaluates a language object passed as an argument. That re-ran the user's own call inside the error handler, and failed as "object 'x' not found" or as C stack overflow. The condition is now built directly, which is the R-side twin of the `quote()` the C side already uses.
+- A checked-in 645-byte encoding of a value exercising every encoder path is compared byte for byte on every CI platform. Under `gctorture(TRUE)` 82 values encode identically, and the local UBSan build with `-UNDEBUG` is clean over the suite and an exerciser that now drives the encoder too.
 
 ---
 

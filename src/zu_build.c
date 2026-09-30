@@ -380,9 +380,36 @@ static SEXP decimal_of_element(SEXP x, int kind)
     return STRING_ELT(x, 0);        /* K_BIGINT */
 }
 
+/* Marks a one-element array that simplified to a vector with I(), so that
+ * cbor_encode() writes it back as an array rather than unboxing it: CBOR ->
+ * R -> CBOR is then a fixed point (design section 6.3). */
+static SEXP as_is(SEXP x)
+{
+    if (XLENGTH(x) != 1)
+        return x;
+    PROTECT(x);
+    SEXP old = Rf_getAttrib(x, R_ClassSymbol);
+    R_xlen_t n = old == R_NilValue ? 0 : XLENGTH(old);
+    SEXP klass = PROTECT(Rf_allocVector(STRSXP, n + 1));
+    SET_STRING_ELT(klass, 0, Rf_mkChar("AsIs"));
+    for (R_xlen_t i = 0; i < n; i++)
+        SET_STRING_ELT(klass, i + 1, STRING_ELT(old, i));
+    Rf_setAttrib(x, R_ClassSymbol, klass);
+    UNPROTECT(2);
+    return x;
+}
+
+static SEXP simplify_kinds(SEXP list, const int *kinds, R_xlen_t n);
+
 /* The array lattice, design section 6.3: an atomic vector when the
- * elements agree, the list otherwise. */
+ * elements agree, the list otherwise; one-element results marked I(). */
 static SEXP simplify(SEXP list, const int *kinds, R_xlen_t n)
+{
+    SEXP out = simplify_kinds(list, kinds, n);
+    return out == list ? out : as_is(out);
+}
+
+static SEXP simplify_kinds(SEXP list, const int *kinds, R_xlen_t n)
 {
     int has[K_COUNT] = {0};
     for (R_xlen_t i = 0; i < n; i++)
@@ -394,8 +421,10 @@ static SEXP simplify(SEXP list, const int *kinds, R_xlen_t n)
     if (has[K_OTHER])
         return list;
 
-    int numeric = has[K_LGL] || has[K_INT] || has[K_INTDBL] || has[K_FLOAT];
-    int others = has[K_BIGINT] + has[K_STR] + has[K_POSIXCT] + has[K_DATE];
+    /* Logical is a kind of its own: [false, 1.5] is a list, not c(0, 1.5),
+     * since a boolean is not a number in CBOR (design section 6.3). */
+    int numeric = has[K_INT] || has[K_INTDBL] || has[K_FLOAT];
+    int others = has[K_LGL] + has[K_BIGINT] + has[K_STR] + has[K_POSIXCT] + has[K_DATE];
     SEXP out;
 
     if (!numeric && !others) {                          /* all null */
@@ -404,29 +433,30 @@ static SEXP simplify(SEXP list, const int *kinds, R_xlen_t n)
             LOGICAL(out)[i] = NA_LOGICAL;
         return out;
     }
+    if (has[K_LGL] && !numeric && others == 1) {
+        out = PROTECT(Rf_allocVector(LGLSXP, n));
+        for (R_xlen_t i = 0; i < n; i++)
+            LOGICAL(out)[i] = kinds[i] == K_NULL ? NA_LOGICAL : LOGICAL(VECTOR_ELT(list, i))[0];
+        UNPROTECT(1);
+        return out;
+    }
     if (numeric && !others) {
-        SEXPTYPE type = (has[K_INTDBL] || has[K_FLOAT]) ? REALSXP
-                        : has[K_INT] ? INTSXP : LGLSXP;
+        SEXPTYPE type = (has[K_INTDBL] || has[K_FLOAT]) ? REALSXP : INTSXP;
         out = PROTECT(Rf_allocVector(type, n));
         for (R_xlen_t i = 0; i < n; i++) {
             SEXP e = VECTOR_ELT(list, i);
             int k = kinds[i];
-            if (type == LGLSXP) {
-                LOGICAL(out)[i] = k == K_NULL ? NA_LOGICAL : LOGICAL(e)[0];
-            } else if (type == INTSXP) {
-                INTEGER(out)[i] = k == K_NULL ? NA_INTEGER
-                                  : k == K_LGL ? LOGICAL(e)[0] : INTEGER(e)[0];
-            } else {
+            if (type == INTSXP)
+                INTEGER(out)[i] = k == K_NULL ? NA_INTEGER : INTEGER(e)[0];
+            else
                 REAL(out)[i] = k == K_NULL ? NA_REAL
-                               : k == K_LGL ? (double) LOGICAL(e)[0]
                                : k == K_INT ? (double) INTEGER(e)[0] : REAL(e)[0];
-            }
         }
         UNPROTECT(1);
         return out;
     }
     /* Integer-valued items and at least one wide integer: all exact. */
-    if (has[K_BIGINT] && !has[K_LGL] && !has[K_FLOAT] && others == 1) {
+    if (has[K_BIGINT] && !has[K_FLOAT] && others == 1) {
         out = PROTECT(Rf_allocVector(STRSXP, n));
         for (R_xlen_t i = 0; i < n; i++) {
             SET_STRING_ELT(out, i, kinds[i] == K_NULL ? NA_STRING

@@ -82,3 +82,37 @@ const char *zu_magnitude_to_dec(const uint8_t *mag, size_t n, int add_one, int n
     out[k] = '\0';
     return out;
 }
+
+/* The big-endian magnitude of a canonical decimal ("0" or no leading zero),
+ * R_alloc()ed, with its length in *n (0 for "0"); NULL if dec is not
+ * canonical. The inverse of zu_magnitude_to_dec(). */
+const uint8_t *zu_dec_to_magnitude(const char *dec, size_t *n)
+{
+    size_t len = strlen(dec);
+    if (len == 0 || (dec[0] == '0' && len > 1))
+        return NULL;
+    for (size_t i = 0; i < len; i++)
+        if (dec[i] < '0' || dec[i] > '9')
+            return NULL;
+    /* Little-endian while building; log2(10) < 3.33 bits per digit. */
+    size_t cap = len * 10 / 24 + 2;
+    uint8_t *le = (uint8_t *) R_alloc(cap, 1);
+    size_t used = 0;
+    for (size_t i = 0; i < len; i++) {
+        unsigned carry = (unsigned)(dec[i] - '0');
+        for (size_t k = 0; k < used; k++) {
+            unsigned v = le[k] * 10u + carry;
+            le[k] = (uint8_t) v;
+            carry = v >> 8;
+        }
+        while (carry) {
+            le[used++] = (uint8_t) carry;
+            carry >>= 8;
+        }
+    }
+    uint8_t *be = (uint8_t *) R_alloc(used ? used : 1, 1);
+    for (size_t k = 0; k < used; k++)
+        be[k] = le[used - 1 - k];
+    *n = used;
+    return be;
+}

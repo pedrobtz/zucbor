@@ -12,15 +12,15 @@ jobs:
   # src/vendor/tinycbor is TinyCBOR verbatim and is never edited in place.
   # tools/verify-vendor re-derives it from the pinned release and fails on any
   # difference; the PR guard then requires a change under src/vendor to come
-  # with the manifest and the provenance record, i.e. through
-  # tools/update-tinycbor. The version literal in test-info.R moves with it.
+  # through tools/update-tinycbor, which rewrites the provenance record, with
+  # the manifest changed when the file set is. A version bump also fails
+  # test-info.R's literal until that is updated, so the guard need not ask.
   vendor:
     uses: pedrobtz/r-actions/.github/workflows/vendor.yml@v1
     with:
       verify: tools/verify-vendor
       must-update: |
         src/vendor/PROVENANCE
-        tests/testthat/test-info.R
 
   # R CMD check NOTEs a shared object that references stdout/stderr, printf,
   # abort, exit or assert (design section 13, trap 4). Checked on a plain

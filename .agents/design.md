@@ -62,7 +62,6 @@ The package decodes and encodes CBOR. It does not verify signatures, parse CDDL,
 - C99, MIT licensed, no dependencies, a dozen small files;
 - a **non-allocating** parser and encoder on the paths used here: it works in the caller's buffer, so every byte of heap state is ours to own (§12);
 - `cbor_value_validate()` covers UTF-8 validity and the canonical-form checks as one audited function, and its iterator reports well-formedness faults with their positions;
-- the encoder measures what it could not write (`cbor_encoder_get_extra_bytes_needed()`), which allows exact-size output with no reallocation (§8);
 - it is maintained — 7.0 (2026-02) carries fixes from outside security review — and small enough to audit.
 
 What it does **not** give us, so the package must:
@@ -71,7 +70,7 @@ What it does **not** give us, so the package must:
 - **Duplicate-key detection in unsorted maps.** `CborValidateMapKeysAreUnique` compares neighbours, so it detects duplicates only in a map already sorted. Detection is ours (§6.5).
 - **Error positions.** `cbor_value_validate()` takes a `const CborValue *` and returns a status only. Offsets come from our own walk (§10).
 - **Correct tag-content rules.** `CborValidateTagUse` checks a table that allows only an integer under tag 1, where RFC 8949 §3.4.2 also allows a float, so it refuses Appendix A's `1(1363896240.5)`; the same table refuses anything but a byte string, array or map under tags 21–23, which RFC 8949 §3.4.5.2 lets wrap any item. The walk checks tag content instead (§11), found at Stage 2.
-- **Semantic tag conversion**, shortest-float selection and map-key sorting on encode. Its encoder writes what it is told.
+- **Semantic tag conversion**, and **the encoder**. Deterministic encoding sorts map entries by their encoded keys, so each key's bytes must be produced, sorted and spliced into the output. TinyCBOR's encoder counts every container's items and has no call that appends bytes it did not produce, so `cbor_encoder_close_container()` would fail with `CborErrorTooFewItems`. zucbor encodes in project code (§8), and `cborencoder.c` is not vendored (decided at Stage 4).
 
 ---
 
@@ -225,13 +224,15 @@ The invariant, shared with `zuyaml`:
 Arrays follow `zujson`'s `"preserve"` lattice, extended by the kinds CBOR adds:
 
 ```text
-numeric family:  null < logical < integer < double
+numbers:         null < integer < double
+booleans:        logical, compatible only with null
 wide integers:   integer-valued items + any cbor_bigint -> cbor_bigint
 strings:         character, compatible only with null
 classed scalars: all POSIXct -> POSIXct; all Date -> Date
 everything else (raw, cbor_simple, cbor_tag, cbor_map, nested arrays and maps,
-                 a mix of kinds) -> list
+                 booleans with numbers, a mix of kinds) -> list
 empty, or all null -> logical
+one element that simplifies -> marked I()
 ```
 
 | CBOR | R |
@@ -244,9 +245,16 @@ empty, or all null -> logical
 | `[h'01', h'02']` | `list` of two `raw` |
 | `[1(0), 1(60)]` | `POSIXct` of length 2 |
 | `[1, "a"]` | `list` |
-| `[]`, `[null]` | `logical(0)`, `NA` |
+| `[]`, `[null]` | `logical(0)`, `I(NA)` |
+| `[true, 1]` | `list(TRUE, 1L)` |
+| `[true, null]` | `c(TRUE, NA)` |
+| `[1]` | `I(1L)` |
 
 A **float** and an **integer-valued double** are different kinds for the `cbor_bigint` rule, because the lattice must not decide from a value's magnitude what type its neighbours become. `[1.0, 2^64−1]` is a list; `[1, 2^64−1]` is a `cbor_bigint`.
+
+**Booleans are not numbers.** `zujson` lets logical join the numeric family (`[true, 1]` is `integer`), but here that would turn `false` into `0`, which is an interpretation of the bytes, not the value they encode (§1). Decided at Stage 4, when the round-trip property test found `[false, 1.5]` re-encoding as `[0, 1.5]`.
+
+**A one-element array is marked `I()`.** Without it `[x]` decodes to a length-one vector, which `cbor_encode()` unboxes to a bare `x`: every one-element array would silently lose its brackets on re-encoding. That matters for signed protocol data, where WebAuthn's `x5c` is often one certificate in an array. `I()` is the same marker the encoder already honours, so decode → encode is a fixed point. Also decided at Stage 4, by the same property test.
 
 `simplify = "none"` makes every array a list. `"coerce"` (`zujson`'s third mode) is not offered: CBOR has fewer stringly-typed producers than JSON, and the mode can be added without a break.
 
@@ -363,7 +371,7 @@ These are the only cases where `cbor_validate()` says `TRUE` and `cbor_decode()`
 | `raw` | **one** byte string, whatever its length |
 | `factor` | its labels, as text |
 | `POSIXct` | tag 1, integer if whole seconds, else float |
-| `Date` | tag 1004, `"YYYY-MM-DD"` |
+| `Date` | tag 1004, `"YYYY-MM-DD"`; tag 100 (days) for a year outside 0000–9999, which RFC 3339 cannot write; fractional days dropped, as `format.Date()` does |
 | `cbor_bigint` | integer if within −2^64 … 2^64−1, else tag 2 / 3 |
 | `cbor_tag` | tag, then its value |
 | `cbor_map` | map with those keys |
@@ -409,10 +417,11 @@ This table is part of the contract and goes into the user documentation as well.
 | NaN payload and sign | canonical quiet NaN (`0xf97e00`) on encode | No |
 | Indefinite lengths, non-shortest heads | decoded normally, re-encoded deterministically | Semantically |
 | Map key order | re-encoded in deterministic order | Semantically |
-| `list(1L)` vs `1L` | both encode as `1` unless `I()` or `auto_unbox = FALSE` | No |
+| `list(1L)` | `[1]`, which decodes as `I(1L)` | Not as a list; CBOR → R → CBOR is exact |
+| `list()` | `[]`, which decodes as `logical(0)` | Not as a list |
 | `NA` | `null`, decodes as `NULL` or `NA` | Not as a typed `NA` |
 
-What *does* round-trip is stated as a property and tested as one (§16): for any CBOR item `b` in deterministic form that decodes under the defaults, `cbor_encode(cbor_decode(b))` is `b`, except where one of the rows above applies.
+What *does* round-trip is stated as a property and tested as one (§16): for any CBOR item `b` in deterministic form that decodes under the defaults, `cbor_encode(cbor_decode(b))` is `b`, except where one of the rows above applies. The one-element and boolean rules of §6.3 exist to make that true.
 
 ---
 
@@ -426,12 +435,12 @@ What *does* round-trip is stated as a property and tested as one (§16): for any
 4. map entries sorted by the **bytewise lexicographic order of their encoded keys**;
 5. no duplicate keys.
 
-Encoding is two passes over the R value:
+The encoder is project code, `src/zu_encode.c` (§3 says why not TinyCBOR's). One routine runs twice over the R value:
 
-- **Measure.** Encode into a zero-length buffer; TinyCBOR counts what it could not write, so the result is the exact output size.
-- **Write.** Allocate one `RAWSXP` of that size and encode into it.
+- **Measure.** Nothing is written; every write only advances a count, so the result is the exact output size.
+- **Write.** Allocate one `RAWSXP` of that size and run again into it.
 
-No reallocation, no growable buffer, and the output never exists twice. Map keys are encoded into `R_alloc` scratch, sorted with `memcmp` (shorter-is-smaller on a common prefix, which is what TinyCBOR's own `CborValidateMapIsSorted` checks), and emitted in that order. So `cbor_validate(cbor_encode(x), deterministic = TRUE)` is `TRUE` for every `x` that encodes — a property test (§16).
+No reallocation, no growable buffer, and the output never exists twice. In both passes each map's keys are encoded into `R_alloc` scratch, merge-sorted with `memcmp` (shorter-is-smaller on a common prefix, which is what TinyCBOR's own `CborValidateMapIsSorted` checks), and checked for duplicates, so a duplicate key fails before the output is allocated. Because the encoding is deterministic, two keys are equal in value exactly when their bytes are equal: `1L` and `1` are one key. Keys from R names are always text strings, whatever `auto_unbox` says. So `cbor_validate(cbor_encode(x), deterministic = TRUE)` is `TRUE` for every `x` that encodes — a property test (§16).
 
 Float width selection is project code (`zu_float.c`), not TinyCBOR's internal `encode_half()`, which is private to its translation units and selects compiler intrinsics by platform. It is tested exhaustively: all 65,536 half-precision bit patterns must survive double → half, and every width decision is checked against the round-trip `(double)(narrow)x == x`.
 
@@ -561,9 +570,9 @@ Pinned at **TinyCBOR 7.0** (tag `v7.0`, commit `6442e749ca811e24afad1551338a45c7
 
 Vendored into `src/vendor/tinycbor/`, byte-identical, listed in `tools/tinycbor-files.txt`:
 
-`cbor.h`, `cborencoder.c`, `cborerrorstrings.c`, `cborparser.c`, `cborpretty.c`, `cborvalidation.c`, `cborinternal_p.h`, `cborinternalmacros_p.h`, `compilersupport_p.h`, `utf8_p.h`, `memory.h`, and `LICENSE`.
+`cbor.h`, `cborerrorstrings.c`, `cborparser.c`, `cborpretty.c`, `cborvalidation.c`, `cborinternal_p.h`, `cborinternalmacros_p.h`, `compilersupport_p.h`, `utf8_p.h`, `memory.h`, and `LICENSE`.
 
-Not vendored: `cbortojson.c` and `cborjson.h` (JSON is `zujson`'s job), `cborpretty_stdio.c` (`FILE *`), `open_memstream.c`, `cborparser_dup_string.c` (`malloc`, §12), `cborencoder_close_container_checked.c` (a deprecated alias), the two `*_float.c` helpers (half-float conversion is ours, §8), the `.in` templates, `parsetags.pl`, `tags.txt`, CMake, tests, examples and tools.
+Not vendored: `cborencoder.c` (zucbor encodes itself, §8; dropped at Stage 4), `cbortojson.c` and `cborjson.h` (JSON is `zujson`'s job), `cborpretty_stdio.c` (`FILE *`), `open_memstream.c`, `cborparser_dup_string.c` (`malloc`, §12), `cborencoder_close_container_checked.c` (a deprecated alias), the two `*_float.c` helpers (half-float conversion is ours, §8), the `.in` templates, `parsetags.pl`, `tags.txt`, CMake, tests, examples and tools.
 
 ### Configuration
 
@@ -727,6 +736,9 @@ CBOR has no number parsing or escape processing, so being slower than the JSON s
 | 20 | Streaming decode | never; whole-buffer only |
 | 21 | Scratch memory | `R_alloc` only; TinyCBOR allocates nothing |
 | 22 | C API | none in v1 |
+| 24 | Encoder | Project code, not TinyCBOR's (§3, §8) |
+| 25 | Booleans in arrays | A kind of their own; `[true, 1]` is a list (§6.3) |
+| 26 | One-element arrays | Marked `I()` on decode, so they re-encode as arrays (§6.3) |
 | 23 | GCC < 11 (trap 8) | Ship 7.0; the README states GCC ≥ 11 (Stage 8). Revisit when upstream releases the fix |
 
 ---

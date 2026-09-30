@@ -106,12 +106,13 @@ test_that("arrays simplify only when their elements agree", {
     "82 f9 3e 00 1b ff ff ff ff ff ff ff ff" = list(1.5, cbor_bigint("18446744073709551615")),
     "82 f5 1b ff ff ff ff ff ff ff ff" = list(TRUE, cbor_bigint("18446744073709551615")),
     "82 61 61 f6" = c("a", NA),
-    "82 f5 01" = c(1L, 1L),
-    "82 f5 f9 3e 00" = c(1, 1.5),
+    "82 f5 01" = list(TRUE, 1L),            # a boolean is not a number
+    "82 f5 f9 3e 00" = list(TRUE, 1.5),
+    "82 f5 f6" = c(TRUE, NA),
     "82 f5 61 78" = list(TRUE, "x"),
     "82 01 61 61" = list(1L, "a"),
     "82 f6 f6" = c(NA, NA),
-    "81 f6" = NA,
+    "81 f6" = I(NA),                        # one element: I(), so it re-encodes as [null]
     "82 f6 f7" = c(NA, NA),
     "82 41 01 41 02" = list(as.raw(1), as.raw(2)),
     "82 c1 00 c1 18 3c" = utc(c(0, 60)),
@@ -257,7 +258,7 @@ test_that("the depth limit holds for the build as well as the check", {
   cap <- zucbor_info()$max_depth_cap
   v <- cbor_decode(nested(cap), max_depth = cap)
   for (i in seq_len(cap - 1L)) v <- v[[1]]
-  expect_identical(v, 0L)
+  expect_identical(v, I(0L))
 })
 
 test_that("a large flat array builds from the checked count", {
@@ -268,4 +269,19 @@ test_that("a large flat array builds from the checked count", {
   expect_identical(cbor_decode(x), rep(1L, n))
   y <- c(hex_raw("9f"), rep(as.raw(0x01), n), hex_raw("ff"))
   expect_identical(cbor_decode(y), rep(1L, n))
+})
+
+test_that("a one-element array is marked I(), so it re-encodes as an array", {
+  expect_identical(cbor_decode(hex_raw("81 01")), I(1L))
+  expect_identical(cbor_decode(hex_raw("81 61 61")), I("a"))
+  expect_identical(cbor_decode(hex_raw("81 c1 00")), I(utc(0)))
+  expect_identical(cbor_decode(hex_raw("81 81 01")), list(I(1L)))
+  expect_identical(cbor_decode(hex_raw("81 01"), simplify = "none"), list(1L))
+  # WebAuthn's x5c is often an array of one certificate.
+  x <- hex_raw("a1 63 78 35 63 81 43 01 02 03")
+  v <- cbor_decode(x)
+  expect_identical(v, list(x5c = list(as.raw(1:3))))
+  expect_identical(cbor_encode(v), x)
+  y <- hex_raw("a1 61 6b 81 01")
+  expect_identical(cbor_encode(cbor_decode(y)), y)
 })

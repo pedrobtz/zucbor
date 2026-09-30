@@ -46,7 +46,7 @@ Design principle:
 | Tags: dates, bignums, self-describe | yes, converted | UUID (37), URI (32) | |
 | Unknown tags | yes, as `cbor_tag` | registered handlers | |
 | Non-text map keys | yes, as `cbor_map` | | stringified by default |
-| Diagnostic notation (`cbor_diagnose()`) | yes, output only | | parsing diagnostic notation |
+| Diagnostic notation (`cbor_diagnose()`) | yes, output only, as RFC 8949 Appendix A writes it | | parsing diagnostic notation |
 | Data frames | | row-oriented, as `zujson` | |
 | CTAP2 canonical key order (length-first) | | yes, if a caller needs it (§19) | as the default |
 | Streaming / incremental decode | | | yes — see §9 |
@@ -133,6 +133,8 @@ zucbor_info()                # TinyCBOR version, compiled limits, defaults
 Thirteen functions, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
 
 **Why `decode`/`encode`, not `parse`/`write`.** The siblings' verbs are for text formats. RFC 8949 speaks of encoders and decoders, and so do the protocols this package serves; a user reading COSE code in another language will look for those words.
+
+**`cbor_diagnose()`** checks the input exactly as `cbor_validate()` does, then prints RFC 8949 §8 diagnostic notation. The printer is project code (`src/zu_diag.c`), not TinyCBOR's `cborpretty.c`, which always marks a float's width (`1.5f16`, or `1.5_1`) and has no flag to leave it out. It matches RFC 8949 Appendix A's own column on 79 of 81 rows. The other two are bignums, whose *value* the table shows where the notation is the tag (`2(h'010000000000000000')`). Numbers print as JavaScript's `Number.prototype.toString()` does (shortest round-trip digits; fixed notation from 1e-7 to 1e21, else an exponent), with `.0` added to a float that would read as an integer. Text is ASCII with JSON escapes, `\u` for everything past it and surrogate pairs above U+FFFF, which is also what makes the output safe on a non-UTF-8 console. The same printer names non-text keys under `map_keys = "string"`. Decided at Stage 5.
 
 **Why there is no `cbor_write()`.** `writeBin(cbor_encode(x), path)` is the whole of it. `cbor_read()` exists because reading has to be bounded before the bytes reach memory (§11); writing has no such concern.
 
@@ -570,9 +572,9 @@ Pinned at **TinyCBOR 7.0** (tag `v7.0`, commit `6442e749ca811e24afad1551338a45c7
 
 Vendored into `src/vendor/tinycbor/`, byte-identical, listed in `tools/tinycbor-files.txt`:
 
-`cbor.h`, `cborerrorstrings.c`, `cborparser.c`, `cborpretty.c`, `cborvalidation.c`, `cborinternal_p.h`, `cborinternalmacros_p.h`, `compilersupport_p.h`, `utf8_p.h`, `memory.h`, and `LICENSE`.
+`cbor.h`, `cborerrorstrings.c`, `cborparser.c`, `cborvalidation.c`, `cborinternal_p.h`, `cborinternalmacros_p.h`, `compilersupport_p.h`, `utf8_p.h`, `memory.h`, and `LICENSE`.
 
-Not vendored: `cborencoder.c` (zucbor encodes itself, §8; dropped at Stage 4), `cbortojson.c` and `cborjson.h` (JSON is `zujson`'s job), `cborpretty_stdio.c` (`FILE *`), `open_memstream.c`, `cborparser_dup_string.c` (`malloc`, §12), `cborencoder_close_container_checked.c` (a deprecated alias), the two `*_float.c` helpers (half-float conversion is ours, §8), the `.in` templates, `parsetags.pl`, `tags.txt`, CMake, tests, examples and tools.
+Not vendored: `cborencoder.c` (zucbor encodes itself, §8; dropped at Stage 4), `cborpretty.c` (zucbor prints diagnostic notation itself, §5; dropped at Stage 5), `cbortojson.c` and `cborjson.h` (JSON is `zujson`'s job), `cborpretty_stdio.c` (`FILE *`), `open_memstream.c`, `cborparser_dup_string.c` (`malloc`, §12), `cborencoder_close_container_checked.c` (a deprecated alias), the two `*_float.c` helpers (half-float conversion is ours, §8), the `.in` templates, `parsetags.pl`, `tags.txt`, CMake, tests, examples and tools.
 
 ### Configuration
 
@@ -590,8 +592,8 @@ Named here so CI does not have to discover them:
 1. **Generated headers.** Never copy a CMake-generated `tinycbor-version.h` from a build directory; `tools/update-tinycbor` writes it from the tag, and `tools/verify-vendor` checks it agrees with `PROVENANCE`.
 2. **C23.** Build with R's default standard on R-devel and R-release, and with `-std=gnu99` on oldrel; a TinyCBOR that compiles in only one mode fails somewhere on CRAN.
 3. **`cbor_assert()` under `NDEBUG`.** R compiles with `-DNDEBUG`, and TinyCBOR 7.0 then defines `cbor_assert(cond)` as `if (!(cond)) unreachable()`. A violated TinyCBOR precondition — calling `cbor_value_get_int64()` on a string, say — is **undefined behaviour, not an abort**. Every TinyCBOR accessor is called only after checking the item's type; the sanitizer jobs build with `-UNDEBUG`, so a violation there aborts visibly instead.
-4. **stdio and abort symbols.** `R CMD check` NOTEs a shared object that references `stdout`, `stderr`, `printf`, `abort` or `exit`. `cborpretty.c` writes through a callback, not stdio, and is safe; `cborpretty_stdio.c` is not vendored. `tools/check-symbols` runs `nm -u` over the built object and fails on any of them, and has been seen to fail on a planted `fprintf(stderr, …)`.
-5. **MinGW formats.** `cborpretty.c` hands `<inttypes.h>` format strings (`PRIu64`) to our printf-style callback, which formats them with `vsnprintf()`. On Windows the macro and the function must agree on MSVC versus C99 conventions; define `-D__USE_MINGW_ANSI_STDIO=1`, as `zuxml` does for Expat. It sits in the one `src/Makevars`, where it is inert off Windows.
+4. **stdio and abort symbols.** `R CMD check` NOTEs a shared object that references `stdout`, `stderr`, `printf`, `abort` or `exit`. None of the vendored files uses stdio; `cborpretty_stdio.c` and `cbortojson.c`, which do, are not vendored. `tools/check-symbols` runs `nm -u` over the built object and fails on any of them, and has been seen to fail on a planted `fprintf(stderr, …)`.
+5. **MinGW formats.** The float formatter uses `"%.*e"` and reads the digits back with `strtod()`. On Windows it must get C99 behaviour, not MSVCRT's, so `-D__USE_MINGW_ANSI_STDIO=1` sits in the one `src/Makevars`, where it is inert off Windows. (It was first there for `cborpretty.c`'s `PRIu64` formats, which left with that file at Stage 5.) No project code uses `<inttypes.h>` format macros: 64-bit integers are formatted by hand (`zu_u64_to_dec()`).
 6. **Half-float intrinsics.** `cborinternal_p.h` selects F16C / SSE2 intrinsics or `_Float16` by compiler and target. We do not call its half-float helpers, but the header is compiled everywhere; i386-without-SSE2 was fixed only in 7.0 (upstream #302). Where `_Float16` is used, the compiler emits calls to its runtime's conversion helpers (`__extendhfsf2`, `__truncsfhf2`; seen with Apple Clang 17 at Stage 1), so the shared object depends on the platform's compiler runtime providing them. CI's full matrix is what proves it does.
 7. **Portable make.** `src/Makevars` lists every object in `OBJECTS` by hand; no `$(wildcard)`, no `$(shell)`, no `-Wno-*`. There is no `Makevars.win`: R on Windows falls back to `Makevars`, and one file cannot drift from itself. `.Rbuildignore` keeps `src/**/*.o`, `*.so` and `*.dll` out of the tarball.
 8. **GCC < 11.** 7.0's `compilersupport_p.h` defines `CBOR_FALLTHROUGH` as `[[fallthrough]]` whenever `__has_cpp_attribute(fallthrough)` is true, and GCC before 11 says it is in C mode too but rejects the syntax: a hard compile error. Upstream fixed it on `main` after 7.0 (`__has_c_attribute` for C), unreleased as of 2026-09-30. **No CRAN flavour is affected**: on 2026-09-30 the oldest GCC in CRAN's check flavours is 14.3 (Windows), and clang reports `__has_cpp_attribute(fallthrough)` false in C mode, falling back to `__attribute__((fallthrough))` (checked with Apple Clang 17 under gnu99, gnu17 and gnu2x, where the vendored subset compiles clean with `-Wall`; Apple Clang 14 on `r-oldrel-macos-arm64` is confirmed by Stage 1's CI). Who is affected is a user building from source with an old system GCC: RHEL/Rocky/Alma 8 without a gcc-toolset (GCC 8), Ubuntu 20.04 (GCC 9), Debian 11 (GCC 10). §19, Q7.
@@ -627,7 +629,7 @@ src/zu_encode.c               §7, §8
 src/zu_float.c                width selection, half conversion
 src/zu_bigint.c               decimal <-> magnitude
 src/zu_time.c                 RFC 3339, civil dates
-src/zu_diag.c                 diagnostic-notation callback
+src/zu_diag.c                 diagnostic notation, and the float formatter it and map keys share
 src/zu_config.h               constants shared with TinyCBOR-facing code; no R headers
 src/zu_tinycbor_check.c       build fails if ZU_MAX_DEPTH_CAP != CBOR_PARSER_MAX_RECURSIONS
 src/zu_info.c                 zucbor_info(): version, cap, self-test
@@ -737,6 +739,7 @@ CBOR has no number parsing or escape processing, so being slower than the JSON s
 | 21 | Scratch memory | `R_alloc` only; TinyCBOR allocates nothing |
 | 22 | C API | none in v1 |
 | 24 | Encoder | Project code, not TinyCBOR's (§3, §8) |
+| 27 | Diagnostic printer | Project code, not TinyCBOR's; matches RFC 8949 Appendix A (§5) |
 | 25 | Booleans in arrays | A kind of their own; `[true, 1]` is a list (§6.3) |
 | 26 | One-element arrays | Marked `I()` on decode, so they re-encode as arrays (§6.3) |
 | 23 | GCC < 11 (trap 8) | Ship 7.0; the README states GCC ≥ 11 (Stage 8). Revisit when upstream releases the fix |

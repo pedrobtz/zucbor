@@ -22,31 +22,6 @@ double zu_half_to_double(uint16_t half)
     return (half & 0x8000) ? -val : val;
 }
 
-/* The shortest decimal that reads back as d, in diagnostic-notation style:
- * always a decimal point or exponent, so 1.0 is not mistaken for the
- * integer 1; NaN and Infinity spelled as RFC 8949 section 8 does. For naming
- * float map keys under map_keys = "string", where TinyCBOR's printer would
- * append its width suffix ("1.5f16"). R keeps LC_NUMERIC at "C", so '.' is
- * the decimal point. buf must hold at least 32 bytes. */
-void zu_format_double(double d, char *buf)
-{
-    if (isnan(d)) {
-        strcpy(buf, "NaN");
-        return;
-    }
-    if (isinf(d)) {
-        strcpy(buf, d > 0 ? "Infinity" : "-Infinity");
-        return;
-    }
-    for (int prec = 1; prec <= 17; prec++) {
-        snprintf(buf, 32, "%.*g", prec, d);
-        if (strtod(buf, NULL) == d)     /* not R_strtod(): see zu_build.c */
-            break;
-    }
-    if (!strpbrk(buf, ".e"))
-        strcat(buf, ".0");
-}
-
 /* d as IEEE 754 binary16, when that is exact: 0 otherwise. NaN is the
  * caller's (it always writes the canonical 0x7e00). Design section 8:
  * width selection is project code, tested over all 65,536 patterns. */

@@ -71,7 +71,7 @@ SEXP zu_fault_sexp(const zu_fault *fault);
 /* ---- zu_float.c ----------------------------------------------------------- */
 
 double zu_half_to_double(uint16_t half);
-void zu_format_double(double d, char *buf);
+void zu_format_double(double d, char *buf);   /* zu_diag.c; buf >= 40 bytes */
 int zu_double_to_half(double d, uint16_t *out);
 int zu_utf8_valid(const uint8_t *s, size_t n);
 
@@ -93,5 +93,7 @@ SEXP zucbor_check(SEXP x, SEXP sequence, SEXP deterministic,
 SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call);
 SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call);
 SEXP zucbor_half_roundtrip(void);
+SEXP zucbor_diagnose(SEXP x, SEXP opts, SEXP max_items);
+SEXP zucbor_format_roundtrip(SEXP x);
 
 #endif

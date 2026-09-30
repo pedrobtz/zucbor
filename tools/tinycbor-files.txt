@@ -4,7 +4,6 @@
 src/cbor.h
 src/cborerrorstrings.c
 src/cborparser.c
-src/cborpretty.c
 src/cborvalidation.c
 src/cborinternal_p.h
 src/cborinternalmacros_p.h

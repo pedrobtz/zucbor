@@ -600,10 +600,6 @@ static SEXP build_map(zu_builder *b, CborValue *it, int *kind)
             SET_STRING_ELT(names, i, STRING_ELT(key, 0));
             if (LENGTH(STRING_ELT(key, 0)) == 0)
                 faithful = 0;       /* R reads "" as no name */
-        } else if (b->map_keys == KEYS_STRING && kinds[i] == K_FLOAT) {
-            char num[32];
-            zu_format_double(REAL(key)[0], num);
-            SET_STRING_ELT(names, i, Rf_mkCharCE(num, CE_UTF8));
         } else if (b->map_keys == KEYS_STRING) {
             size_t len;
             const char *d = zu_diagnose_item(&key_at[i], &len);

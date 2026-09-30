@@ -36,7 +36,13 @@ zu_arg_limits <- function(max_depth, max_size, max_items, call = NULL) {
   zu_arg_limit(max_items, "max_items", 2^53, allow_inf = TRUE, call)
 }
 
-zu_max_depth_cap <- function() .Call(zucbor_build_info)$max_depth_cap
+# TinyCBOR's compile-time ceiling, fetched once: zucbor_build_info() also
+# runs a self-test, far too much for every argument check.
+zu_cache <- new.env(parent = emptyenv())
+zu_max_depth_cap <- function() {
+  if (is.null(zu_cache$depth_cap)) zu_cache$depth_cap <- .Call(zucbor_build_info)$max_depth_cap
+  zu_cache$depth_cap
+}
 
 zu_describe <- function(x) {
   if (is.null(x)) "NULL" else sprintf("a %s vector", typeof(x))

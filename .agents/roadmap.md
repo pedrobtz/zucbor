@@ -290,7 +290,7 @@ The core. Everything after it relies on what this stage guarantees.
 
 ## Stage 8 — Documentation, benchmarks, CRAN prep · M
 
-**Status:** not started.
+**Status:** complete.
 
 **Do**
 - roxygen for every export, with runnable examples; the §6 and §7 tables and §7.4's lossy list in the help pages.
@@ -303,6 +303,22 @@ The core. Everything after it relies on what this stage guarantees.
 **Exit**
 - Zero NOTEs beyond "New submission".
 - Benchmarks meet §17, or each gap is documented with a measured reason.
+
+**What actually happened**
+
+- **The first benchmark missed every §17 target by a lot.** Decoding took 3.4–4.5× zujson's time, encoding 1.7–3.3×, and the check phase was 40 % of decoding. Six causes were found by reading the code against the numbers, and each fix was re-measured:
+  - a second validation pass only for UTF-8;
+  - an allocation per map for duplicate-key sorting;
+  - a copy of every text string;
+  - a throwaway vector per map key;
+  - an R object per scalar array element;
+  - an encoder measuring pass.
+- **Where that left the numbers.** Decoding reached 1.7–2.2× and encoding 0.95–1.3×. The remaining decode gap is the check-before-build design, plus yyjson's speed, so design §17 now records the measurements and revised targets. That follows zuxml's precedent of documenting a gap with its measured reason rather than gating on an aspiration.
+- **The fixes were side effects worth having on their own.** UTF-8 moved into the walk, so UTF-8 faults gained byte offsets (§19 Q4 closed) and a new `utf8` guard joined the mutation check. The encoder's output buffer is `malloc()` memory owned by a finalized external pointer: the family's memory rule applied for the first time in this package, since until then everything had been `R_alloc()`.
+- **`-Wshadow` found three shadowed locals** as soon as the lint gate of Stage 7 ran over these changes: two in Stage 5's rewritten exponent formatter and one in Stage 8's already-sorted check. The exponent formatter itself was rewritten because GCC's `-Wformat-truncation` could not prove an `snprintf()` safe, which R CMD check on Linux raises to a WARNING. R 4.6's own `R_ext/Boolean.h` fails `-Wpedantic` under gnu17, so the gate passes R's headers as `-isystem`.
+- **Stacked pull requests need retargeting before the base branch is deleted.** Merging Stage 3 with `--delete-branch` closed Stage 4's PR rather than retargeting it. The branch was restored, the PR reopened and pointed at `main`, and later merges retarget first.
+- Two vignettes ship: *Decoding untrusted CBOR*, and *COSE and WebAuthn*, which decodes a WebAuthn attestation object, its COSE_Key and an RFC 8392 CWT, and builds the `Sig_structure` a verifier signs over. A getting-started article is pkgdown-only. The README is rewritten, and states the GCC ≥ 11 requirement (decision 23).
+- `R CMD check --as-cran --run-donttest` is 0/0/0 at version 0.1.0, and `pkgdown::check_pkgdown()` finds no problems.
 
 ---
 

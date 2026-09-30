@@ -4,6 +4,9 @@
 
 - **Pedro Baltazar**. Author, maintainer, copyright holder.
 
+- **Intel Corporation**. Copyright holder.  
+  TinyCBOR, bundled in src/vendor/tinycbor
+
 ## Citation
 
 Source:

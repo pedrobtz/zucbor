@@ -5,7 +5,9 @@ Encodes R values as Concise Binary Object Representation (CBOR, RFC
 checks the whole input against configurable depth, size and item limits
 before any R object is built, so untrusted input from network peers and
 devices cannot drive large allocations. Encoding is deterministic:
-identical R objects always produce identical bytes.
+identical R objects always produce identical bytes. Uses a bundled copy
+of the 'TinyCBOR' library (<https://github.com/intel/tinycbor>), so no
+system library is required.
 
 ## See also
 
@@ -24,3 +26,8 @@ Useful links:
 Authors:
 
 - Pedro Baltazar <pedrobtz@gmail.com> \[copyright holder\]
+
+Other contributors:
+
+- Intel Corporation (TinyCBOR, bundled in src/vendor/tinycbor)
+  \[copyright holder\]

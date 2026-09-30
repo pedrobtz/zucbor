@@ -6,30 +6,35 @@
  * counts every container's items and has no call that appends bytes it did
  * not produce (cbor_encoder_close_container() then fails TooFewItems).
  *
- * One routine runs twice. The first pass writes nothing and counts; the
- * second writes into a single RAWSXP of exactly that size. Map keys are
- * encoded into R_alloc() scratch in both passes, since duplicate keys must
- * be refused before the output exists. Everything held is PROTECTed or
- * R_alloc()ed, so an error raised from anywhere leaks nothing. */
+ * One pass writes into a growing malloc() buffer owned by a finalized
+ * external pointer, so an error raised from anywhere frees it (design
+ * section 12); the result is one copy into a RAWSXP of exactly the right
+ * size, after which the buffer is freed eagerly. Stage 8 measured the
+ * original two-pass design (measure, then write into an exact RAWSXP) at
+ * twice the encoding time for no benefit a caller can see. */
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "zucbor.h"
-
-typedef struct {
-    uint8_t *out;           /* NULL while measuring */
-    size_t pos;
-    int max_depth;
-    int auto_unbox;
-    SEXP call;
-} zu_encoder;
 
 typedef struct {
     const uint8_t *key;
     size_t key_len;
     R_xlen_t index;
 } zu_entry;
+
+typedef struct {
+    uint8_t *out;           /* NULL while only counting (map keys) */
+    size_t pos, cap;
+    SEXP owner;             /* external pointer owning out; R_NilValue for scratch */
+    int max_depth;
+    int auto_unbox;
+    SEXP call;
+    zu_entry **pool;        /* map entry arrays, one per depth, reused */
+    R_xlen_t *pool_cap;
+} zu_encoder;
 
 static void encode(zu_encoder *e, SEXP x, int depth);
 static void encode_element(zu_encoder *e, SEXP x, R_xlen_t i, int depth);
@@ -61,8 +66,12 @@ static void fail_encode(zu_encoder *e, const char *status, const char *detail)
 
 /* ---- output ------------------------------------------------------------------ */
 
+static void grow_output(zu_encoder *e, size_t need);
+
 static void put(zu_encoder *e, const void *p, size_t n)
 {
+    if (e->owner != R_NilValue && e->pos + n > e->cap)
+        grow_output(e, e->pos + n);
     if (e->out && n)
         memcpy(e->out + e->pos, p, n);
     e->pos += n;
@@ -263,9 +272,26 @@ static int entry_cmp(const zu_entry *a, const zu_entry *b)
     return a->key_len < b->key_len ? -1 : (a->key_len > b->key_len ? 1 : 0);
 }
 
-/* Merge sort: deterministic, and O(n log n) on any key order. */
-static void sort_entries(zu_entry *a, R_xlen_t n)
+/* Text keys by UTF-8 length, then bytes: the bytewise order of their
+ * encodings, since a text head grows with the length (0x60 + n below 24,
+ * then 0x78 n, 0x79 nn ...), so no key needs encoding to be sorted. */
+static int text_cmp(const zu_entry *a, const zu_entry *b)
 {
+    if (a->key_len != b->key_len)
+        return a->key_len < b->key_len ? -1 : 1;
+    return a->key_len ? memcmp(a->key, b->key, a->key_len) : 0;
+}
+
+/* Merge sort: deterministic, and O(n log n) on any key order. Input that is
+ * already in order, as most R lists are not but many maps built for a
+ * protocol are, is detected in one pass and left alone. */
+static void sort_entries(zu_entry *a, R_xlen_t n, int (*cmp)(const zu_entry *, const zu_entry *))
+{
+    R_xlen_t run = 1;
+    while (run < n && cmp(&a[run - 1], &a[run]) < 0)
+        run++;
+    if (run >= n)
+        return;
     zu_entry *tmp = (zu_entry *) R_alloc((size_t) n, sizeof(zu_entry));
     zu_entry *src = a, *dst = tmp;
     for (R_xlen_t width = 1; width < n; width *= 2) {
@@ -274,7 +300,7 @@ static void sort_entries(zu_entry *a, R_xlen_t n)
             R_xlen_t hi = lo + 2 * width < n ? lo + 2 * width : n;
             R_xlen_t i = lo, j = mid, k = lo;
             while (i < mid && j < hi)
-                dst[k++] = entry_cmp(&src[j], &src[i]) < 0 ? src[j++] : src[i++];
+                dst[k++] = cmp(&src[j], &src[i]) < 0 ? src[j++] : src[i++];
             while (i < mid)
                 dst[k++] = src[i++];
             while (j < hi)
@@ -294,6 +320,7 @@ static const uint8_t *encode_key(zu_encoder *e, SEXP key, SEXP name, int depth, 
 {
     zu_encoder sub = *e;
     uint8_t *buf = NULL;
+    sub.owner = R_NilValue;         /* count, then write into scratch */
     for (int pass = 0; pass < 2; pass++) {
         sub.out = buf;
         sub.pos = 0;
@@ -312,26 +339,47 @@ static const uint8_t *encode_key(zu_encoder *e, SEXP key, SEXP name, int depth, 
  * deterministic order. depth is the map's own level. */
 static void put_map(zu_encoder *e, SEXP keys, SEXP names, SEXP values, R_xlen_t n, int depth)
 {
-    zu_entry *entries = (zu_entry *) R_alloc((size_t) n + 1, sizeof(zu_entry));
+    /* One entry array per depth, grown when needed: a nested map is at a
+     * deeper level, so it never overwrites the array its parent is using. */
+    if (!e->pool[depth] || e->pool_cap[depth] < n + 1) {
+        e->pool_cap[depth] = n + 1 > 2 * e->pool_cap[depth] ? n + 1 : 2 * e->pool_cap[depth];
+        e->pool[depth] = (zu_entry *) R_alloc((size_t) e->pool_cap[depth], sizeof(zu_entry));
+    }
+    zu_entry *entries = e->pool[depth];
+    int text = keys == R_NilValue;
+    /* Held until the map is written: translated names live in R_alloc(). */
+    const void *vmax = vmaxget();
     for (R_xlen_t i = 0; i < n; i++) {
-        if (keys != R_NilValue)
+        if (text) {
+            SEXP s = STRING_ELT(names, i);
+            if (Rf_getCharCE(s) == CE_BYTES)
+                fail_encode(e, ZU_ERR_INVALID_VALUE, "a string marked as \"bytes\" has no text encoding");
+            const char *u = Rf_translateCharUTF8(s);
+            entries[i].key = (const uint8_t *) u;
+            entries[i].key_len = strlen(u);
+            if (!zu_utf8_valid(entries[i].key, entries[i].key_len))
+                fail_encode(e, ZU_ERR_INVALID_VALUE, "a name is not valid UTF-8");
+        } else {
             entries[i].key = encode_key(e, VECTOR_ELT(keys, i), R_NilValue, depth, &entries[i].key_len);
-        else
-            entries[i].key = encode_key(e, R_NilValue, STRING_ELT(names, i), depth, &entries[i].key_len);
+        }
         entries[i].index = i;
     }
-    sort_entries(entries, n);
+    int (*cmp)(const zu_entry *, const zu_entry *) = text ? text_cmp : entry_cmp;
+    sort_entries(entries, n, cmp);
     for (R_xlen_t i = 1; i < n; i++)
-        if (entry_cmp(&entries[i - 1], &entries[i]) == 0)
+        if (cmp(&entries[i - 1], &entries[i]) == 0)
             fail_encode(e, ZU_ERR_DUPLICATE_KEY, "two map keys encode identically");
     put_head(e, 5, (uint64_t) n);
     for (R_xlen_t i = 0; i < n; i++) {
+        if (text)
+            put_head(e, 3, entries[i].key_len);
         put(e, entries[i].key, entries[i].key_len);
         if (TYPEOF(values) == VECSXP)
             encode(e, VECTOR_ELT(values, entries[i].index), depth);
         else
             encode_element(e, values, entries[i].index, depth);
     }
+    vmaxset(vmax);
 }
 
 /* Names that can be map keys: present on every element, not NA, not "". */
@@ -513,6 +561,31 @@ static void encode(zu_encoder *e, SEXP x, int depth)
 
 /* ---- entry point ------------------------------------------------------------------ */
 
+static void free_output(SEXP owner)
+{
+    void *p = R_ExternalPtrAddr(owner);
+    if (p) {
+        R_ClearExternalPtr(owner);      /* clear first: eager free and GC are then safe */
+        free(p);
+    }
+}
+
+static void grow_output(zu_encoder *e, size_t need)
+{
+    size_t cap = e->cap ? e->cap : 256;
+    while (cap < need) {
+        if (cap > SIZE_MAX / 2)
+            fail_encode(e, ZU_ERR_INVALID_VALUE, "the encoding is too large");
+        cap *= 2;
+    }
+    uint8_t *p = realloc(e->out, cap);
+    if (!p)
+        fail_encode(e, ZU_ERR_INVALID_VALUE, "not enough memory for the encoding");
+    e->out = p;
+    e->cap = cap;
+    R_SetExternalPtrAddr(e->owner, p);
+}
+
 SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call)
 {
     if (TYPEOF(opts) != INTSXP || XLENGTH(opts) != 4)
@@ -520,19 +593,24 @@ SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call)
     const int *o = INTEGER(opts);
     int sequence = o[0];
     zu_encoder e;
-    e.out = NULL;
-    e.pos = 0;
+    memset(&e, 0, sizeof e);
     e.auto_unbox = o[1];
     int self_describe = o[2];
     e.max_depth = o[3];
     e.call = call;
     if (e.max_depth < 1 || e.max_depth > ZU_MAX_DEPTH_CAP)
         Rf_error("zucbor_encode: limits must be validated in R");
+    /* depth runs to max_depth + 1: a map's entries sit one level below it */
+    e.pool = (zu_entry **) R_alloc((size_t) e.max_depth + 2, sizeof(zu_entry *));
+    e.pool_cap = (R_xlen_t *) R_alloc((size_t) e.max_depth + 2, sizeof(R_xlen_t));
+    memset(e.pool, 0, ((size_t) e.max_depth + 2) * sizeof(zu_entry *));
+    memset(e.pool_cap, 0, ((size_t) e.max_depth + 2) * sizeof(R_xlen_t));
+
+    e.owner = PROTECT(R_MakeExternalPtr(NULL, R_NilValue, R_NilValue));
+    R_RegisterCFinalizerEx(e.owner, free_output, TRUE);
 
     R_xlen_t items = sequence ? XLENGTH(x) : 1;
     const uint8_t describe[] = {0xd9, 0xd9, 0xf7};
-
-    /* Measure: nothing is written, every write only counts. */
     for (R_xlen_t i = 0; i < items; i++) {
         if (self_describe)
             put(&e, describe, 3);
@@ -540,17 +618,11 @@ SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call)
     }
     if (e.pos > (size_t) R_XLEN_T_MAX)
         fail_encode(&e, ZU_ERR_INVALID_VALUE, "the encoding is longer than an R vector can be");
-
-    /* Write, into exactly that many bytes. */
     SEXP out = PROTECT(Rf_allocVector(RAWSXP, (R_xlen_t) e.pos));
-    e.out = RAW(out);
-    e.pos = 0;
-    for (R_xlen_t i = 0; i < items; i++) {
-        if (self_describe)
-            put(&e, describe, 3);
-        encode(&e, sequence ? VECTOR_ELT(x, i) : x, 1);
-    }
-    UNPROTECT(1);
+    if (e.pos)
+        memcpy(RAW(out), e.out, e.pos);
+    free_output(e.owner);
+    UNPROTECT(2);
     return out;
 }
 
@@ -566,6 +638,7 @@ SEXP zucbor_half_roundtrip(void)
         zu_encoder e;
         memset(&e, 0, sizeof e);
         e.out = buf;
+        e.owner = R_NilValue;
         put_float(&e, d);
         uint16_t want = isnan(d) ? 0x7e00 : (uint16_t) h;
         if (e.pos != 3 || buf[0] != 0xf9 || buf[1] != (uint8_t)(want >> 8) || buf[2] != (uint8_t) want)

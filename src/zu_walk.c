@@ -19,14 +19,16 @@
 #include "zu_check.h"
 #include "cbor.h"
 
-/* Validity checks every read path shares (design section 11). Two checks
- * that TinyCBOR offers are the walk's instead:
+/* Validity checks every read path shares (design section 11): none remain
+ * TinyCBOR's but deterministic encoding, so cbor_value_validate() runs only
+ * for deterministic = TRUE. Three checks TinyCBOR offers are the walk's:
+ *  - UTF-8, not CborValidateUtf8: in the same pass, and with an offset;
  *  - trailing bytes, not CborValidateCompleteData: in a sequence the next
  *    item's bytes are not garbage;
  *  - tag content, not CborValidateTagUse: TinyCBOR 7.0's table allows only
  *    an integer under tag 1, where RFC 8949 section 3.4.2 also allows a
  *    float, so it refuses Appendix A's 1(1363896240.5). See tag_content_ok(). */
-#define ZU_VALIDATE_FLAGS (CborValidateUtf8)
+#define ZU_VALIDATE_FLAGS (CborValidateCanonicalFormat)
 
 #define ZU_INTERRUPT_EVERY 65536u
 
@@ -65,6 +67,8 @@ typedef struct {
     uint64_t items;
     zu_key *keys;
     size_t n_keys, cap_keys;
+    zu_key *sort_tmp;       /* merge-sort buffer, reused across maps */
+    size_t sort_cap;
 } zu_walker;
 
 /* ---- faults ---------------------------------------------------------------- */
@@ -154,10 +158,28 @@ static int key_cmp(const zu_key *a, const zu_key *b)
 }
 
 /* Bottom-up merge sort: O(n log n) on any input. A library qsort() may be
- * quadratic on an adversarial order, and the keys are the adversary's. */
-static void sort_keys(zu_key *a, size_t n)
+ * quadratic on an adversarial order, and the keys are the adversary's.
+ * Small maps, the common case, take an insertion sort in place; larger ones
+ * share one buffer, grown as needed, rather than allocating per map. */
+static void sort_keys(zu_walker *w, zu_key *a, size_t n)
 {
-    zu_key *tmp = (zu_key *) zu_scratch(n, sizeof(zu_key));
+    if (n <= 16) {
+        for (size_t i = 1; i < n; i++) {
+            zu_key k = a[i];
+            size_t j = i;
+            while (j > 0 && key_cmp(&k, &a[j - 1]) < 0) {
+                a[j] = a[j - 1];
+                j--;
+            }
+            a[j] = k;
+        }
+        return;
+    }
+    if (n > w->sort_cap) {
+        w->sort_cap = n < 2 * w->sort_cap ? 2 * w->sort_cap : n;
+        w->sort_tmp = (zu_key *) zu_scratch(w->sort_cap, sizeof(zu_key));
+    }
+    zu_key *tmp = w->sort_tmp;
     zu_key *src = a, *dst = tmp;
     for (size_t width = 1; width < n; width *= 2) {
         for (size_t lo = 0; lo < n; lo += 2 * width) {
@@ -185,7 +207,7 @@ static int check_duplicates(zu_walker *w, size_t base)
     if (n < 2)
         return 0;               /* and w->keys may still be NULL */
     zu_key *k = w->keys + base;
-    sort_keys(k, n);
+    sort_keys(w, k, n);
     for (size_t i = 1; i < n; i++) {
         if (key_cmp(&k[i - 1], &k[i]) == 0) {  /* GUARD: duplicate-keys */
             size_t later = k[i].offset > k[i - 1].offset ? k[i].offset : k[i - 1].offset;
@@ -328,6 +350,11 @@ static int walk_string(zu_walker *w, CborValue *it, int want_content,
             return fail_cbor(w, err, cbor_value_get_next_byte(it));
         if (chunked && count_item(w, (const uint8_t *)p))
             return 1;
+        /* UTF-8 here rather than in cbor_value_validate(): one pass instead
+         * of two, and the fault gets an offset. Each chunk must be valid on
+         * its own (RFC 8949 section 3.2.3). */
+        if (text && !zu_utf8_valid((const uint8_t *)p, n))  /* GUARD: utf8 */
+            return fail_cbor(w, CborErrorInvalidUtf8TextString, (const uint8_t *)p);
         if (!chunks)
             *content = (const uint8_t *)p;
         chunks++;
@@ -567,9 +594,6 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
         return fail_cbor(&w, CborErrorUnexpectedEOF, buf);
     }
 
-    uint32_t flags = ZU_VALIDATE_FLAGS;
-    if (opt->deterministic)
-        flags |= CborValidateCanonicalFormat;
 
     size_t pos = 0;
     while (pos < len) {
@@ -581,10 +605,13 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
         CborValue start = it;
         if (walk_item(&w, &it))
             return 1;
-        /* Validation reports no position (design section 10). */
-        err = cbor_value_validate(&start, flags);
-        if (err)
-            return fail_cbor(&w, err, NULL);
+        /* Deterministic encoding is the one check left to TinyCBOR, and
+         * it reports no position (design section 10). */
+        if (opt->deterministic) {
+            err = cbor_value_validate(&start, ZU_VALIDATE_FLAGS);
+            if (err)
+                return fail_cbor(&w, err, NULL);
+        }
         pos = (size_t)(cbor_value_get_next_byte(&it) - buf);
         if (plan)
             plan->n_items++;

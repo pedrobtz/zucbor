@@ -2,3 +2,29 @@ url: https://pedrobtz.github.io/zucbor/
 template:
   bootstrap: 5
 
+reference:
+  - title: Decode
+    contents:
+      - cbor_decode
+      - cbor_read
+      - cbor_validate
+      - cbor_diagnose
+  - title: Encode
+    contents:
+      - cbor_encode
+  - title: Values without an R type
+    contents:
+      - cbor-values
+  - title: Errors and build information
+    contents:
+      - zucbor-conditions
+      - zucbor_info
+      - zucbor-package
+
+articles:
+  - title: Using zucbor
+    navbar: ~
+    contents:
+      - articles/zucbor
+      - untrusted
+      - cose-webauthn

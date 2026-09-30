@@ -1,0 +1,5 @@
+#!/bin/sh
+# Installs the working tree and runs tools/benchmarks.R (design section 17).
+set -eu
+R CMD INSTALL --preclean . > /dev/null
+Rscript tools/benchmarks.R

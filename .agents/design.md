@@ -439,10 +439,7 @@ What *does* round-trip is stated as a property and tested as one (§16): for any
 
 The encoder is project code, `src/zu_encode.c` (§3 says why not TinyCBOR's). One routine runs twice over the R value:
 
-- **Measure.** Nothing is written; every write only advances a count, so the result is the exact output size.
-- **Write.** Allocate one `RAWSXP` of that size and run again into it.
-
-No reallocation, no growable buffer, and the output never exists twice. In both passes each map's keys are encoded into `R_alloc` scratch, merge-sorted with `memcmp` (shorter-is-smaller on a common prefix, which is what TinyCBOR's own `CborValidateMapIsSorted` checks), and checked for duplicates, so a duplicate key fails before the output is allocated. Because the encoding is deterministic, two keys are equal in value exactly when their bytes are equal: `1L` and `1` are one key. Keys from R names are always text strings, whatever `auto_unbox` says. So `cbor_validate(cbor_encode(x), deterministic = TRUE)` is `TRUE` for every `x` that encodes — a property test (§16).
+~~Measure, then write into one exactly sized `RAWSXP`.~~ Since Stage 8 the encoder is one pass into a growing `malloc()` buffer owned by a finalized external pointer (§12), then one copy into a `RAWSXP` of exactly the right size, after which the buffer is freed eagerly: the measuring pass cost as much as the write for nothing a caller can see (§17). Each map's keys are encoded into `R_alloc` scratch, merge-sorted with `memcmp` (shorter-is-smaller on a common prefix, which is what TinyCBOR's own `CborValidateMapIsSorted` checks), and checked for duplicates, so a duplicate key fails before the output is allocated. Because the encoding is deterministic, two keys are equal in value exactly when their bytes are equal: `1L` and `1` are one key. Keys from R names are always text strings, whatever `auto_unbox` says. So `cbor_validate(cbor_encode(x), deterministic = TRUE)` is `TRUE` for every `x` that encodes — a property test (§16).
 
 Float width selection is project code (`zu_float.c`), not TinyCBOR's internal `encode_half()`, which is private to its translation units and selects compiler intrinsics by platform. It is tested exhaustively: all 65,536 half-precision bit patterns must survive double → half, and every width decision is checked against the round-trip `(double)(narrow)x == x`.
 
@@ -483,7 +480,7 @@ zucbor_error
 
 Every decode-side condition carries:
 
-- `offset` — the 0-based byte offset of the item at fault, or `NA` when only `cbor_value_validate()` saw the fault (it reports no position; §3). Since Stage 2 that is only invalid UTF-8 and the deterministic-encoding checks; everything else, tag content included, is the walk's and has an offset;
+- `offset` — the 0-based byte offset of the item at fault, or `NA` when only `cbor_value_validate()` saw the fault (it reports no position; §3). Since Stage 8 that is only the deterministic-encoding checks: UTF-8 moved into the walk (one pass instead of two) and, with tag content, has an offset;
 - `status` — the TinyCBOR enumerator's **name** (`"CborErrorUnexpectedEOF"`), or zucbor's own (`"ZU_ERR_DUPLICATE_KEY"`);
 - for a limit error, `limit` (the argument's name) and `limit_value`;
 - for `zucbor_invalid_argument`, `arg`.
@@ -524,7 +521,9 @@ A limit is a positive whole number, or `Inf` for `max_size` and `max_items` (the
 
 **`deterministic = TRUE`** adds `CborValidateCanonicalFormat` to the validation flags and makes the walk reject a bignum whose value fits a plain integer (RFC 8949 §3.4.3). It is for inputs that are about to be hashed or signed again, where a second encoding of the same value is an attack surface.
 
-The validation flags otherwise are `CborValidateUtf8` alone, used by every read path through one constant (`ZU_VALIDATE_FLAGS`), so `cbor_decode()` and `cbor_validate()` cannot disagree about the bytes (the `ZUJSON_READ_FLAGS` rule). Two checks TinyCBOR offers are the walk's instead:
+`cbor_value_validate()` runs only for `deterministic = TRUE`, with `CborValidateCanonicalFormat` (`ZU_VALIDATE_FLAGS`); every other check is the walk's, shared by every read path, so `cbor_decode()` and `cbor_validate()` cannot disagree about the bytes (the `ZUJSON_READ_FLAGS` rule). Three checks TinyCBOR offers are the walk's instead:
+
+- **UTF-8**, not `CborValidateUtf8`: each chunk validated as the walk meets it (RFC 8949 §3.2.3), in the same pass, with an offset (Stage 8).
 
 - **Trailing bytes**, not `CborValidateCompleteData`: a sequence validates item by item, where the next item's bytes are not garbage, and one check in one place serves both.
 - **Tag content**, not `CborValidateTagUse` (§3): each tag's content type is checked as the walk meets it, against TinyCBOR's table with its two errors corrected, plus the tags zucbor converts. A restricted tag wrapping another tag is refused, since a tag is not any of the types it allows.
@@ -711,6 +710,8 @@ The build, encode and diagnostic phases build R objects, so they are not libFuzz
 
 ## 17. Performance targets
 
+The design set these before any code existed:
+
 | | Target |
 |---|---|
 | Decode | faster than `zujson::json_parse()` on the same data as JSON |
@@ -719,7 +720,23 @@ The build, encode and diagnostic phases build R objects, so they are not libFuzz
 | R allocations | none in the check phase; the encoder allocates its output once |
 | Install time | seconds, from source, everywhere |
 
-CBOR has no number parsing or escape processing, so being slower than the JSON sibling on the same data would point at the R-object building, which is where the time should go. Benchmarks live in `tools/`, are not in CI (shared runners are too noisy to gate on), and use a 1 KiB COSE message, a 100 KiB telemetry sequence, a 10 MiB synthetic document, many-tiny-items, and large byte strings.
+Measured at Stage 8 (`tools/run-benchmarks`, local macOS, R 4.5.2; ratios are CBOR time over JSON time, so below 1 is faster):
+
+| Fixture | decode | encode | check share |
+|---|---|---|---|
+| 1 KiB message | 3.9× | 2.4× | 0.62 |
+| 100 KiB telemetry | 2.2× | 1.3× | 0.41 |
+| 10 MiB document | 2.0× | 1.1× | 0.40 |
+| many tiny items | 1.7× | 0.95× | 0.43 |
+| large strings | 0.95× | 0.95× | 0.26 |
+
+Encoding meets its target within a few tens of percent; decoding does not, and the check-phase share is above its target. The reasons are measured, not guessed:
+
+- **The check phase is the design.** Checking the whole input before building anything (§4) means two passes, and the first costs about 40 % of a decode. zujson's yyjson is itself among the fastest parsers there is. "Faster than zujson" was aspirational from the start; the property the check buys is worth more to this package's users than the difference.
+- **Stage 8 removed what was not the design:** a second validation pass for UTF-8 (now in the walk, which also gave UTF-8 faults offsets), an allocation per map for duplicate-key sorting, a copy of every text string, a throwaway vector per map key, an R object per scalar array element (now staged in C and allocated only if the array does not simplify), a measuring pass in the encoder (now one pass into a growing buffer owned by a finalized external pointer, §12), and per-map key encoding when the keys are R names (text keys sort by length then bytes, which is their encodings' bytewise order). Together they took decoding from 3.4–4.5× to 1.7–2.2× and encoding from 1.7–3.3× to 0.95–1.3×.
+- **The 1 KiB row is fixed cost:** about 20 µs of R-level argument checking per call, against a 7 µs JSON parse.
+
+Revised targets, which the numbers above meet and which a regression would miss: decode within 2.5× of zujson on the same data, encode within 1.5×, check phase at most half of decode time. Benchmarks are not in CI; shared runners are too noisy to gate on.
 
 ---
 
@@ -762,7 +779,7 @@ CBOR has no number parsing or escape processing, so being slower than the JSON s
 1. **CTAP2 canonical order.** CTAP2 requires RFC 7049 length-first key order; RFC 8949 deterministic encoding is bytewise. They differ (e.g. `24` versus `-1`). Decoding CTAP2 data needs nothing, since signatures cover bytes, not re-encodings. An authenticator emulator would need a `key_order` argument. Add it when a caller asks.
 2. **UUID and URI tags.** Converting 37 to a `cbor_uuid` class and 32 to a character vector, or leaving both as `cbor_tag`. Decide on use.
 3. **Data frames.** Encode row-oriented as `zujson` does, and decode arrays of text-keyed maps opt-in. Deferred to keep v1's mapping small; SenML users are the likely askers.
-4. **Validation offsets.** `cbor_value_validate()` reports no position, so a UTF-8 or deterministic-encoding error has `offset = NA` (tag content moved to the walk at Stage 2 and has one). Validating per item from the walk would recover it at some cost to throughput. Measure first.
+4. ~~**Validation offsets.**~~ Closed at Stage 8: UTF-8 and tag content are checked by the walk and have offsets; only deterministic-encoding faults, from TinyCBOR's validator, have `offset = NA`. Validating per item from the walk would recover it at some cost to throughput. Measure first.
 5. **The bignum conversion cap** (128 bytes, §6.6). Revisit if a protocol uses larger integers as numbers rather than as opaque bytes.
 6. **A C API for siblings.** `zucrypt` (COSE signing) or `zuhttp` (`application/cbor`) may want CBOR from C. Design it only once one of them has a concrete need, following `zukomp`'s registered-table pattern (`zujson` §15).
 7. ~~**GCC < 11**~~ Closed at Stage 1 (2026-09-30): 7.0 is still upstream's newest release, so it ships, and the README states the GCC ≥ 11 requirement. Decision 23.

@@ -1,0 +1,62 @@
+---
+title: "Getting started with zucbor"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+```{r}
+library(zucbor)
+```
+
+## A round trip
+
+```{r}
+x <- list(name = "sensor-7", reading = c(21.5, 21.75), ok = TRUE,
+          seen = as.POSIXct("2026-09-30 12:00:00", tz = "UTC"))
+b <- cbor_encode(x)
+length(b)
+cbor_diagnose(b)
+str(cbor_decode(b))
+```
+
+## How CBOR becomes R
+
+| CBOR | R |
+|---|---|
+| integer | `integer`, `double` up to 2^53, `cbor_bigint` beyond |
+| float | `double` |
+| `true`, `false` | `logical` |
+| `null`, `undefined` | `NULL`, or `NA` in a vector |
+| byte string | `raw` |
+| text string | `character` |
+| array | an atomic vector when the elements agree, else a `list` |
+| map with text keys | a named `list` |
+| any other map | `cbor_map` |
+| date and time tags | `POSIXct`, `Date` |
+| other tags | `cbor_tag` |
+
+```{r}
+cbor_decode(cbor_encode(list(1L, "a")))           # mixed: a list
+cbor_decode(as.raw(c(0x82, 0x01, 0x02)))          # [1, 2]: an integer vector
+cbor_decode(as.raw(c(0x81, 0x01)))                # [1]: I(1L), so it re-encodes as [1]
+cbor_decode(as.raw(c(0x1b, rep(0xff, 8))))        # 2^64 - 1, exactly
+```
+
+## Values R has no type for
+
+```{r}
+cbor_encode(cbor_map(list(1L, -1L), list("a", "b")))    # integer keys
+cbor_encode(cbor_tag(32, "https://example.com"))         # a URI tag
+cbor_encode(cbor_bigint("340282366920938463463374607431768211456"))   # 2^128
+```
+
+## Sequences
+
+An RFC 8742 CBOR sequence is items one after another, as sensors stream them:
+
+```{r}
+s <- cbor_encode_seq(list(1, "two", list(three = 3)))
+cbor_decode_seq(s)
+```

@@ -163,7 +163,23 @@ static const char *read_text(zu_builder *b, CborValue *it, size_t *n)
 {
     const uint8_t *at = cbor_value_get_next_byte(it);
     size_t len;
-    CborError err = cbor_value_calculate_string_length(it, &len);
+    CborError err;
+    /* A definite-length string is one chunk: point into the input, which
+     * outlives the .Call, rather than measure and copy it. Callers use the
+     * length, never a terminator. */
+    if (cbor_value_is_length_known(it)) {
+        const char *p;
+        (void) cbor_value_begin_string_iteration(it);
+        err = cbor_value_get_text_string_chunk(it, &p, &len, it);
+        if (err)
+            internal(b, err, at);
+        err = cbor_value_finish_string_iteration(it);
+        if (err)
+            internal(b, err, at);
+        *n = len;
+        return p;
+    }
+    err = cbor_value_calculate_string_length(it, &len);
     if (err)
         internal(b, err, at);
     char *buf = (char *) R_alloc(len + 1, 1);
@@ -354,32 +370,6 @@ static SEXP build_tag(zu_builder *b, CborValue *it, int *kind)
 
 /* ---- arrays ---------------------------------------------------------------------- */
 
-static SEXP decimal_of_element(SEXP x, int kind)
-{
-    char dec[24];
-    if (kind == K_INT) {
-        int v = INTEGER(x)[0];
-        if (v < 0) {
-            dec[0] = '-';
-            zu_u64_to_dec((uint64_t)(-(int64_t) v), dec + 1);
-        } else {
-            zu_u64_to_dec((uint64_t) v, dec);
-        }
-        return Rf_mkChar(dec);
-    }
-    if (kind == K_INTDBL) {
-        double v = REAL(x)[0];      /* integer-valued, |v| <= 2^53 */
-        if (v < 0) {
-            dec[0] = '-';
-            zu_u64_to_dec((uint64_t)(-v), dec + 1);
-        } else {
-            zu_u64_to_dec((uint64_t) v, dec);
-        }
-        return Rf_mkChar(dec);
-    }
-    return STRING_ELT(x, 0);        /* K_BIGINT */
-}
-
 /* Marks a one-element array that simplified to a vector with I(), so that
  * cbor_encode() writes it back as an array rather than unboxing it: CBOR ->
  * R -> CBOR is then a fixed point (design section 6.3). */
@@ -401,27 +391,93 @@ static SEXP as_is(SEXP x)
     return x;
 }
 
-static SEXP simplify_kinds(SEXP list, const int *kinds, R_xlen_t n);
+/* An array's elements, staged. Scalars go into C buffers and cost no R
+ * allocation; containers, tags and byte strings are built as R values into
+ * `list`. Most arrays simplify to an atomic vector (design section 6.3), so
+ * most never need a SEXP per element: Stage 8 measured that as the largest
+ * cost of decoding. */
+typedef struct {
+    R_xlen_t n;
+    int *kinds;
+    double *num;            /* K_INT, K_INTDBL, K_FLOAT (exact for all three) */
+    int *lgl;               /* K_LGL */
+    SEXP strs;              /* K_STR, as CHARSXPs; allocated on first use */
+    SEXP list;              /* elements built as R values; allocated on first use */
+    char *built;            /* nonzero: element i is in list */
+} zu_stage;
 
-/* The array lattice, design section 6.3: an atomic vector when the
- * elements agree, the list otherwise; one-element results marked I(). */
-static SEXP simplify(SEXP list, const int *kinds, R_xlen_t n)
+static SEXP stage_scalar(const zu_stage *st, R_xlen_t i)
 {
-    SEXP out = simplify_kinds(list, kinds, n);
-    return out == list ? out : as_is(out);
+    switch (st->kinds[i]) {
+    case K_INT:
+        return Rf_ScalarInteger((int) st->num[i]);
+    case K_INTDBL:
+    case K_FLOAT:
+        return Rf_ScalarReal(st->num[i]);
+    case K_LGL:
+        return Rf_ScalarLogical(st->lgl[i]);
+    case K_STR:
+        return Rf_ScalarString(STRING_ELT(st->strs, i));
+    default:
+        return R_NilValue;
+    }
 }
 
-static SEXP simplify_kinds(SEXP list, const int *kinds, R_xlen_t n)
+static double stage_num(const zu_stage *st, R_xlen_t i)
 {
+    if (!st->built[i])
+        return st->num[i];
+    SEXP e = VECTOR_ELT(st->list, i);
+    return TYPEOF(e) == INTSXP ? (double) INTEGER(e)[0] : REAL(e)[0];
+}
+
+static SEXP stage_charsxp(const zu_stage *st, R_xlen_t i)
+{
+    return st->built[i] ? STRING_ELT(VECTOR_ELT(st->list, i), 0) : STRING_ELT(st->strs, i);
+}
+
+static SEXP decimal_of(const zu_stage *st, R_xlen_t i)
+{
+    if (st->kinds[i] == K_BIGINT)
+        return STRING_ELT(VECTOR_ELT(st->list, i), 0);
+    double v = stage_num(st, i);   /* integer-valued, |v| <= 2^53 */
+    char dec[24];
+    if (v < 0) {
+        dec[0] = '-';
+        zu_u64_to_dec((uint64_t)(-v), dec + 1);
+    } else {
+        zu_u64_to_dec((uint64_t) v, dec);
+    }
+    return Rf_mkChar(dec);
+}
+
+/* The staged elements as a list: every element an R value. */
+static SEXP stage_list(zu_stage *st)
+{
+    if (st->list == R_NilValue)
+        st->list = Rf_allocVector(VECSXP, st->n);
+    PROTECT(st->list);
+    for (R_xlen_t i = 0; i < st->n; i++)
+        if (!st->built[i] && st->kinds[i] != K_NULL)
+            SET_VECTOR_ELT(st->list, i, stage_scalar(st, i));
+    UNPROTECT(1);
+    return st->list;
+}
+
+/* The array lattice, design section 6.3: an atomic vector when the
+ * elements agree, the list otherwise. NULL means "a list". */
+static SEXP simplify_staged(const zu_stage *st)
+{
+    R_xlen_t n = st->n;
+    const int *kinds = st->kinds;
     int has[K_COUNT] = {0};
     for (R_xlen_t i = 0; i < n; i++)
         has[kinds[i]] = 1;
 
-    if (n == 0) {
+    if (n == 0)
         return Rf_allocVector(LGLSXP, 0);
-    }
     if (has[K_OTHER])
-        return list;
+        return R_NilValue;
 
     /* Logical is a kind of its own: [false, 1.5] is a list, not c(0, 1.5),
      * since a boolean is not a number in CBOR (design section 6.3). */
@@ -436,57 +492,50 @@ static SEXP simplify_kinds(SEXP list, const int *kinds, R_xlen_t n)
         return out;
     }
     if (has[K_LGL] && !numeric && others == 1) {
-        out = PROTECT(Rf_allocVector(LGLSXP, n));
+        out = Rf_allocVector(LGLSXP, n);
         for (R_xlen_t i = 0; i < n; i++)
-            LOGICAL(out)[i] = kinds[i] == K_NULL ? NA_LOGICAL : LOGICAL(VECTOR_ELT(list, i))[0];
-        UNPROTECT(1);
+            LOGICAL(out)[i] = kinds[i] == K_NULL ? NA_LOGICAL
+                              : st->built[i] ? LOGICAL(VECTOR_ELT(st->list, i))[0] : st->lgl[i];
         return out;
     }
     if (numeric && !others) {
-        SEXPTYPE type = (has[K_INTDBL] || has[K_FLOAT]) ? REALSXP : INTSXP;
-        out = PROTECT(Rf_allocVector(type, n));
+        int real = has[K_INTDBL] || has[K_FLOAT];
+        out = Rf_allocVector(real ? REALSXP : INTSXP, n);
         for (R_xlen_t i = 0; i < n; i++) {
-            SEXP e = VECTOR_ELT(list, i);
-            int k = kinds[i];
-            if (type == INTSXP)
-                INTEGER(out)[i] = k == K_NULL ? NA_INTEGER : INTEGER(e)[0];
+            if (real)
+                REAL(out)[i] = kinds[i] == K_NULL ? NA_REAL : stage_num(st, i);
             else
-                REAL(out)[i] = k == K_NULL ? NA_REAL
-                               : k == K_INT ? (double) INTEGER(e)[0] : REAL(e)[0];
+                INTEGER(out)[i] = kinds[i] == K_NULL ? NA_INTEGER : (int) stage_num(st, i);
         }
-        UNPROTECT(1);
         return out;
     }
     /* Integer-valued items and at least one wide integer: all exact. */
     if (has[K_BIGINT] && !has[K_FLOAT] && others == 1) {
         out = PROTECT(Rf_allocVector(STRSXP, n));
-        for (R_xlen_t i = 0; i < n; i++) {
-            SET_STRING_ELT(out, i, kinds[i] == K_NULL ? NA_STRING
-                                   : decimal_of_element(VECTOR_ELT(list, i), kinds[i]));
-        }
+        for (R_xlen_t i = 0; i < n; i++)
+            SET_STRING_ELT(out, i, kinds[i] == K_NULL ? NA_STRING : decimal_of(st, i));
         Rf_setAttrib(out, R_ClassSymbol, Rf_mkString("cbor_bigint"));
         UNPROTECT(1);
         return out;
     }
     if (numeric || others != 1)
-        return list;
+        return R_NilValue;
     if (has[K_STR]) {
         out = PROTECT(Rf_allocVector(STRSXP, n));
         for (R_xlen_t i = 0; i < n; i++)
-            SET_STRING_ELT(out, i, kinds[i] == K_NULL ? NA_STRING
-                                   : STRING_ELT(VECTOR_ELT(list, i), 0));
+            SET_STRING_ELT(out, i, kinds[i] == K_NULL ? NA_STRING : stage_charsxp(st, i));
         UNPROTECT(1);
         return out;
     }
-    /* POSIXct or Date: keep the first element's attributes. */
+    /* POSIXct or Date: always built, as tags; keep the first's attributes. */
     int want = has[K_POSIXCT] ? K_POSIXCT : K_DATE;
     SEXP proto = R_NilValue;
     out = PROTECT(Rf_allocVector(REALSXP, n));
     for (R_xlen_t i = 0; i < n; i++) {
         if (kinds[i] == want) {
-            REAL(out)[i] = REAL(VECTOR_ELT(list, i))[0];
+            REAL(out)[i] = REAL(VECTOR_ELT(st->list, i))[0];
             if (proto == R_NilValue)
-                proto = VECTOR_ELT(list, i);
+                proto = VECTOR_ELT(st->list, i);
         } else {
             REAL(out)[i] = NA_REAL;
         }
@@ -506,22 +555,104 @@ static size_t next_count(zu_builder *b, const uint8_t *at)
 static SEXP build_array(zu_builder *b, CborValue *it, int *kind)
 {
     const uint8_t *at = cbor_value_get_next_byte(it);
-    R_xlen_t n = (R_xlen_t) next_count(b, at);
-    SEXP out = PROTECT(Rf_allocVector(VECSXP, n));
-    int *kinds = (int *) R_alloc((size_t) n + 1, sizeof(int));
+    zu_stage st;
+    st.n = (R_xlen_t) next_count(b, at);
+    size_t m = (size_t) st.n + 1;
+    st.kinds = (int *) R_alloc(m, sizeof(int));
+    st.num = (double *) R_alloc(m, sizeof(double));
+    st.lgl = (int *) R_alloc(m, sizeof(int));
+    st.built = (char *) R_alloc(m, 1);
+    memset(st.built, 0, m);
+    st.strs = R_NilValue;
+    st.list = R_NilValue;
+    PROTECT_INDEX strs_ix, list_ix;
+    PROTECT_WITH_INDEX(st.strs, &strs_ix);
+    PROTECT_WITH_INDEX(st.list, &list_ix);
+
     CborValue child;
     CborError err = cbor_value_enter_container(it, &child);
     if (err)
         internal(b, err, at);
-    for (R_xlen_t i = 0; i < n; i++)
-        SET_VECTOR_ELT(out, i, build(b, &child, &kinds[i]));
+    for (R_xlen_t i = 0; i < st.n; i++) {
+        const uint8_t *el = cbor_value_get_next_byte(&child);
+        CborType type = cbor_value_get_type(&child);
+        int staged = 1;
+        switch (type) {
+        case CborIntegerType: {
+            uint64_t raw;
+            cbor_value_get_raw_integer(&child, &raw);
+            int neg = cbor_value_is_negative_integer(&child);
+            const uint64_t two53 = UINT64_C(1) << 53;
+            if (!neg ? raw <= (uint64_t) INT_MAX : raw <= (uint64_t) INT_MAX - 1) {
+                st.kinds[i] = K_INT;
+                st.num[i] = neg ? -1.0 - (double) raw : (double) raw;
+            } else if (!neg ? raw <= two53 : raw <= two53 - 1) {
+                st.kinds[i] = K_INTDBL;
+                st.num[i] = neg ? -1.0 - (double) raw : (double) raw;
+            } else {
+                staged = 0;         /* wide: big_integers decides, in build() */
+            }
+            if (staged)
+                advance(b, &child, el);
+            break;
+        }
+        case CborHalfFloatType:
+        case CborFloatType:
+        case CborDoubleType:
+            st.kinds[i] = K_FLOAT;
+            st.num[i] = read_float(&child);
+            advance(b, &child, el);
+            break;
+        case CborBooleanType: {
+            bool v;
+            cbor_value_get_boolean(&child, &v);
+            st.kinds[i] = K_LGL;
+            st.lgl[i] = v;
+            advance(b, &child, el);
+            break;
+        }
+        case CborNullType:
+        case CborUndefinedType:
+            st.kinds[i] = K_NULL;
+            advance(b, &child, el);
+            break;
+        case CborTextStringType: {
+            size_t len;
+            const char *s = read_text(b, &child, &len);
+            if (st.strs == R_NilValue) {
+                st.strs = Rf_allocVector(STRSXP, st.n);
+                REPROTECT(st.strs, strs_ix);
+            }
+            SET_STRING_ELT(st.strs, i, zu_mkchar(b, s, len, el));
+            st.kinds[i] = K_STR;
+            break;
+        }
+        default:
+            staged = 0;
+        }
+        if (staged) {
+            if (++b->items % ZU_INTERRUPT_EVERY == 0)
+                R_CheckUserInterrupt();
+            continue;
+        }
+        if (st.list == R_NilValue) {
+            st.list = Rf_allocVector(VECSXP, st.n);
+            REPROTECT(st.list, list_ix);
+        }
+        SET_VECTOR_ELT(st.list, i, build(b, &child, &st.kinds[i]));
+        st.built[i] = 1;
+    }
     err = cbor_value_leave_container(it, &child);
     if (err)
         internal(b, err, at);
-    if (b->simplify == SIMPLIFY_PRESERVE)
-        out = simplify(out, kinds, n);
+
+    SEXP out = b->simplify == SIMPLIFY_PRESERVE ? simplify_staged(&st) : R_NilValue;
+    if (out == R_NilValue)
+        out = stage_list(&st);
+    else
+        out = as_is(out);
     *kind = K_OTHER;
-    UNPROTECT(1);
+    UNPROTECT(2);
     return out;
 }
 
@@ -565,20 +696,52 @@ static SEXP build_map(zu_builder *b, CborValue *it, int *kind)
 {
     const uint8_t *at = cbor_value_get_next_byte(it);
     R_xlen_t n = (R_xlen_t) next_count(b, at);
-    SEXP keys = PROTECT(Rf_allocVector(VECSXP, n));
     SEXP values = PROTECT(Rf_allocVector(VECSXP, n));
-    int *kinds = (int *) R_alloc((size_t) n + 1, sizeof(int));
-    CborValue *key_at = b->map_keys == KEYS_STRING
-                        ? (CborValue *) R_alloc((size_t) n + 1, sizeof(CborValue)) : NULL;
+    SEXP names = PROTECT(Rf_allocVector(STRSXP, n));
+    /* The keys as R values, needed only for a cbor_map: built the first time
+     * a key is not plain text (or always, under map_keys = "map"). Plain
+     * text keys, the common case, go straight into names. */
+    SEXP keys = R_NilValue;
+    PROTECT_INDEX keys_ix;
+    PROTECT_WITH_INDEX(keys, &keys_ix);
+    int faithful = b->map_keys != KEYS_MAP;
     CborValue child;
-    int value_kind;
+    int key_kind, value_kind;
     CborError err = cbor_value_enter_container(it, &child);
     if (err)
         internal(b, err, at);
     for (R_xlen_t i = 0; i < n; i++) {
-        if (key_at)
-            key_at[i] = child;
-        SET_VECTOR_ELT(keys, i, build(b, &child, &kinds[i]));
+        const uint8_t *key_start = cbor_value_get_next_byte(&child);
+        if (keys == R_NilValue && b->map_keys != KEYS_MAP && cbor_value_is_text_string(&child)) {
+            size_t len;
+            if (++b->items % ZU_INTERRUPT_EVERY == 0)
+                R_CheckUserInterrupt();
+            const char *s = read_text(b, &child, &len);
+            SET_STRING_ELT(names, i, zu_mkchar(b, s, len, key_start));
+            if (len == 0)
+                faithful = 0;       /* R reads "" as no name */
+        } else {
+            if (keys == R_NilValue) {
+                keys = Rf_allocVector(VECSXP, n);
+                REPROTECT(keys, keys_ix);
+                for (R_xlen_t k = 0; k < i; k++)
+                    SET_VECTOR_ELT(keys, k, Rf_ScalarString(STRING_ELT(names, k)));
+            }
+            CborValue key_at = child;
+            SEXP key = build(b, &child, &key_kind);
+            SET_VECTOR_ELT(keys, i, key);
+            if (key_kind == K_STR) {
+                SET_STRING_ELT(names, i, STRING_ELT(key, 0));
+                if (LENGTH(STRING_ELT(key, 0)) == 0)
+                    faithful = 0;
+            } else if (b->map_keys == KEYS_STRING) {
+                size_t len;
+                const char *d = zu_diagnose_item(&key_at, &len);
+                SET_STRING_ELT(names, i, zu_mkchar(b, d, len, key_start));
+            } else {
+                faithful = 0;
+            }
+        }
         SET_VECTOR_ELT(values, i, build(b, &child, &value_kind));
     }
     err = cbor_value_leave_container(it, &child);
@@ -586,29 +749,6 @@ static SEXP build_map(zu_builder *b, CborValue *it, int *kind)
         internal(b, err, at);
     *kind = K_OTHER;
 
-    if (b->map_keys == KEYS_MAP) {
-        SEXP out = make_map(keys, values);
-        UNPROTECT(2);
-        return out;
-    }
-
-    SEXP names = PROTECT(Rf_allocVector(STRSXP, n));
-    int faithful = 1;
-    for (R_xlen_t i = 0; i < n; i++) {
-        SEXP key = VECTOR_ELT(keys, i);
-        if (kinds[i] == K_STR) {
-            SET_STRING_ELT(names, i, STRING_ELT(key, 0));
-            if (LENGTH(STRING_ELT(key, 0)) == 0)
-                faithful = 0;       /* R reads "" as no name */
-        } else if (b->map_keys == KEYS_STRING) {
-            size_t len;
-            const char *d = zu_diagnose_item(&key_at[i], &len);
-            SET_STRING_ELT(names, i, zu_mkchar(b, d, len, cbor_value_get_next_byte(&key_at[i])));
-        } else {
-            faithful = 0;
-            break;
-        }
-    }
     if (b->map_keys == KEYS_STRING) {
         /* Stringifying may make distinct keys equal: "1" and 1 both become
          * the name "1". That is refused whatever duplicate_keys says, since
@@ -624,6 +764,12 @@ static SEXP build_map(zu_builder *b, CborValue *it, int *kind)
         Rf_setAttrib(values, R_NamesSymbol, names);
         out = values;
     } else {
+        if (keys == R_NilValue) {       /* every key was text, but not faithful */
+            keys = Rf_allocVector(VECSXP, n);
+            REPROTECT(keys, keys_ix);
+            for (R_xlen_t k = 0; k < n; k++)
+                SET_VECTOR_ELT(keys, k, Rf_ScalarString(STRING_ELT(names, k)));
+        }
         out = make_map(keys, values);
     }
     UNPROTECT(3);

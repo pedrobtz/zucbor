@@ -79,11 +79,23 @@ test_that("an unknown tag with any content is valid", {
   expect_true(cbor_validate(hex_raw("da 00 01 00 00 f6")))
 })
 
-test_that("a validation fault has no offset, a walk fault has one", {
-  e <- expect_error(cbor_validate(hex_raw("61 ff"), error = TRUE), class = "zucbor_invalid_error")
-  expect_true(is.na(e$offset))
+test_that("faults carry offsets, except deterministic-encoding ones", {
+  # UTF-8 is checked by the walk, per chunk, so it has the chunk's offset.
+  e <- expect_error(cbor_validate(hex_raw("82 01 61 ff"), error = TRUE), class = "zucbor_invalid_error")
+  expect_identical(e$offset, 3)
+  expect_identical(e$status, "CborErrorInvalidUtf8TextString")
   e <- expect_error(cbor_validate(hex_raw("82 01"), error = TRUE), class = "zucbor_parse_error")
   expect_false(is.na(e$offset))
+  # Deterministic encoding is TinyCBOR's validator, which reports no position.
+  e <- expect_error(cbor_validate(hex_raw("18 01"), deterministic = TRUE, error = TRUE),
+                    class = "zucbor_deterministic_error")
+  expect_true(is.na(e$offset))
+})
+
+test_that("each chunk of a text string must be UTF-8 on its own", {
+  # U+00FC split across two chunks: c3 | bc (RFC 8949 section 3.2.3).
+  expect_false(cbor_validate(hex_raw("7f 61 c3 61 bc ff")))
+  expect_true(cbor_validate(hex_raw("7f 62 c3 bc ff")))
 })
 
 test_that("error = TRUE returns TRUE invisibly on valid input", {

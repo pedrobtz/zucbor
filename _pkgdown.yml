@@ -26,5 +26,6 @@ articles:
     navbar: ~
     contents:
       - articles/zucbor
+      - articles/examples
       - untrusted
       - cose-webauthn

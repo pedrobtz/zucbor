@@ -104,6 +104,9 @@ against CDDL schemas, or decode base64: those belong to other packages.
   deterministic input.
 - `vignette("cose-webauthn", package = "zucbor")`: WebAuthn attestation
   objects, COSE keys and signed structures.
+- [Examples](https://pedrobtz.github.io/zucbor/articles/examples.html): worked
+  examples for COSE keys, wide integers, dates, embedded CBOR, telemetry,
+  files and limits.
 - `?cbor_decode` and `?cbor_encode` state the full mapping between CBOR and R.
 
 zucbor is one of the `zu*` packages, with

@@ -1,53 +1,36 @@
 # Changelog
 
-## zucbor 0.0.0.9000
+## zucbor 0.1.0
 
-- Package skeleton: metadata, licence and build configuration.
-- Bundles TinyCBOR 7.0 (`src/vendor/tinycbor`), verified byte-for-byte
-  against the upstream release by `tools/verify-vendor`.
-- [`zucbor_info()`](https://pedrobtz.github.io/zucbor/reference/zucbor_info.md)
-  reports the bundled TinyCBOR version, the ceiling on nesting depth and
-  the default decoding limits.
-- [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md)
-  checks that a raw vector holds well-formed, valid CBOR, or an RFC 8742
-  sequence, within depth, size and item limits, without building any R
-  value. Duplicate map keys are refused by default, compared by value.
-  `deterministic = TRUE` also requires RFC 8949 core deterministic
-  encoding. Every fault is a classed condition inheriting `zucbor_error`
-  (see
-  [`?"zucbor-conditions"`](https://pedrobtz.github.io/zucbor/reference/zucbor-conditions.md)).
-- [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
-  and
-  [`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
-  turn CBOR into ordinary R values, after the same whole-input check
-  [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md)
-  runs. Arrays simplify to atomic vectors when their elements agree;
-  maps with text keys become named lists; integers stay exact
-  (`cbor_bigint` beyond 2^53); dates and times become `POSIXct` and
-  `Date`.
+- Initial CRAN release.
+- [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md),
+  [`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md),
   [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
   and
   [`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
-  read from a file, URL or connection, never more than `max_size + 1`
-  bytes.
+  turn CBOR (RFC 8949) and CBOR sequences (RFC 8742) into ordinary R
+  values. The whole input is checked first – well-formedness, UTF-8, tag
+  content, duplicate map keys (by value), and depth, size and item
+  limits – so a length header can never make R allocate for data the
+  input does not hold. Every fault is a classed condition inheriting
+  `zucbor_error`.
+- [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  and
+  [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  write RFC 8949 core deterministic encoding: identical R objects give
+  identical bytes on every platform, and decoding then re-encoding
+  deterministic input reproduces it exactly.
+- [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md)
+  runs the check alone;
+  [`cbor_diagnose()`](https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.md)
+  shows CBOR in RFC 8949 diagnostic notation, as the RFC’s own examples
+  write it.
 - [`cbor_map()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md),
   [`cbor_tag()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md),
   [`cbor_simple()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)
   and
   [`cbor_bigint()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)
-  represent the values R has no native type for.
-- [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
-  and
-  [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
-  write R values as CBOR in RFC 8949 core deterministic encoding:
-  identical R objects give identical bytes on every platform. Whole
-  doubles are written as integers, so a COSE algorithm identifier
-  written as `-7` stays an integer.
-- Decoding marks a one-element array with
-  [`I()`](https://rdrr.io/r/base/AsIs.html) and keeps booleans apart
-  from numbers, so that decoding and re-encoding gives back the same
-  bytes.
-- [`cbor_diagnose()`](https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.md)
-  shows CBOR in RFC 8949 diagnostic notation, as the RFC’s own examples
-  write it, after the same check as
-  [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md).
+  represent the values R has no native type for: maps with non-text
+  keys, tagged items, simple values and integers beyond 2^53.
+- Bundles the parser and validator of TinyCBOR 7.0; no system library is
+  needed.

@@ -1,52 +1,170 @@
 # zucbor
 
-The goal of zucbor is to …
+zucbor encodes and decodes CBOR (RFC 8949), the binary counterpart of
+JSON, to and from ordinary R vectors and lists. It is built for input
+you do not trust — COSE and CWT tokens, WebAuthn passkey data, CoAP
+device telemetry — and for output that must be byte-exact.
+
+- **Decoding checks the whole input before building anything.**
+  Well-formedness, UTF-8, tag content, duplicate map keys and
+  configurable depth, size and item limits are all enforced first, so a
+  length header can never make R allocate for data the input does not
+  contain.
+- **Encoding is deterministic.** Identical R objects give identical
+  bytes on every platform (RFC 8949 core deterministic encoding), and
+  decoding then re-encoding deterministic input gives back exactly the
+  same bytes — what a signature over CBOR needs.
+- **Values keep their meaning.** Integers stay exact beyond 2^53, byte
+  strings stay raw, maps with integer keys stay maps, dates become
+  `POSIXct` and `Date`.
+- **No system library.** A subset of
+  [TinyCBOR](https://github.com/intel/tinycbor) is bundled; the encoder
+  and the diagnostic printer are zucbor’s own.
 
 ## Installation
 
-You can install the development version of zucbor from
-[GitHub](https://github.com/) with:
-
 ``` r
 
+install.packages("zucbor")
+
+# or the development version:
 # install.packages("pak")
 pak::pak("pedrobtz/zucbor")
 ```
 
-## Example
+Building from source needs a C compiler; with GCC, version 11 or newer
+(older GCC rejects a construct in the bundled TinyCBOR 7.0).
 
-This is a basic example which shows you how to solve a common problem:
+## Decoding
 
 ``` r
 
 library(zucbor)
-## basic example code
+
+cbor_decode(as.raw(c(0xa2, 0x61, 0x61, 0x01, 0x61, 0x62, 0x82, 0x02, 0x03)))
+#> $a
+#> [1] 1
+#>
+#> $b
+#> [1] 2 3
 ```
+
+A map whose keys are not all text — a COSE header, say — is a
+`cbor_map`, never a list with the keys quietly turned into names:
+
+``` r
+
+cbor_decode(as.raw(c(0xa2, 0x01, 0x26, 0x04, 0x42, 0x31, 0x31)))
+#> <cbor_map: 2 entries>
+#> [[1]]
+#> [1] -7
+#> [[4]]
+#> [1] 31 31
+```
+
+Hostile input fails with a classed condition, before any R object
+exists:
+
+``` r
+
+# An array header claiming 2^64 - 1 elements, in nine bytes.
+tryCatch(cbor_decode(as.raw(c(0x9b, rep(0xff, 8)))),
+         zucbor_error = function(e) class(e)[1])
+#> [1] "zucbor_parse_error"
+
+# The same key twice, once in a longer encoding: refused by value.
+cbor_validate(as.raw(c(0xa2, 0x01, 0x00, 0x18, 0x01, 0x00)))
+#> [1] FALSE
+```
+
+## Encoding
+
+``` r
+
+b <- cbor_encode(list(alg = -7, kid = charToRaw("11"),
+                      when = as.POSIXct("2026-01-01", tz = "UTC")))
+b
+#>  [1] a3 63 61 6c 67 26 63 6b 69 64 42 31 31 64 77 68 65 6e c1 1a 69 55 b9 00
+
+cbor_diagnose(b)
+#> [1] "{\"alg\": -7, \"kid\": h'3131', \"when\": 1(1767225600)}"
+
+# Deterministic: map entries are sorted by their encoded keys.
+identical(cbor_encode(list(b = 1, a = 2)), cbor_encode(list(a = 2, b = 1)))
+#> [1] TRUE
+```
+
+`-7` is a double in R, but it is written as the integer a COSE algorithm
+identifier must be: a whole double is always an integer in CBOR.
+
+## What zucbor is not
+
+It decodes and encodes CBOR. It does not verify COSE signatures,
+validate against CDDL schemas, or decode base64: those belong to other
+packages.
+
+## Learn more
+
+- [`vignette("untrusted", package = "zucbor")`](https://pedrobtz.github.io/zucbor/articles/untrusted.md):
+  limits, duplicate keys and deterministic input.
+- [`vignette("cose-webauthn", package = "zucbor")`](https://pedrobtz.github.io/zucbor/articles/cose-webauthn.md):
+  WebAuthn attestation objects, COSE keys and signed structures.
+- [`?cbor_decode`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
+  and
+  [`?cbor_encode`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  state the full mapping between CBOR and R.
+
+zucbor is one of the `zu*` packages, with
+[zujson](https://github.com/pedrobtz/zujson),
+[zuyaml](https://github.com/pedrobtz/zuyaml) and
+[zuxml](https://github.com/pedrobtz/zuxml).
 
 # Package index
 
-## All functions
+## Decode
+
+- [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
+  [`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
+  : Decode CBOR
+- [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
+  [`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
+  : Read CBOR from a file or connection
+- [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md)
+  : Validate CBOR
+- [`cbor_diagnose()`](https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.md)
+  : CBOR diagnostic notation
+
+## Encode
+
+- [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  : Encode R values as CBOR
+
+## Values without an R type
 
 - [`cbor_map()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)
   [`cbor_tag()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)
   [`cbor_simple()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)
   [`cbor_bigint()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)
   : CBOR values without a native R type
-- [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
-  [`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
-  : Decode CBOR
-- [`cbor_diagnose()`](https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.md)
-  : CBOR diagnostic notation
-- [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
-  [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
-  : Encode R values as CBOR
-- [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
-  [`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
-  : Read CBOR from a file or connection
-- [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md)
-  : Validate CBOR
+
+## Errors and build information
+
 - [`zucbor-conditions`](https://pedrobtz.github.io/zucbor/reference/zucbor-conditions.md)
   : Conditions raised by zucbor
 - [`zucbor_info()`](https://pedrobtz.github.io/zucbor/reference/zucbor_info.md)
   : Build information
+- [`zucbor`](https://pedrobtz.github.io/zucbor/reference/zucbor-package.md)
+  [`zucbor-package`](https://pedrobtz.github.io/zucbor/reference/zucbor-package.md)
+  : zucbor: Deterministic and Secure CBOR Encoding and Decoding
 
+# Articles
+
+### Using zucbor
+
+- [Getting started with
+  zucbor](https://pedrobtz.github.io/zucbor/articles/zucbor.md):
+- [Decoding untrusted
+  CBOR](https://pedrobtz.github.io/zucbor/articles/untrusted.md):
+- [COSE and
+  WebAuthn](https://pedrobtz.github.io/zucbor/articles/cose-webauthn.md):

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">zucbor</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -15,7 +15,14 @@
     </button>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
-      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../articles/zucbor.html">Get started</a></li>
+<li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/zucbor.html">Getting started with zucbor</a></li>
+    <li><a class="dropdown-item" href="../articles/untrusted.html">Decoding untrusted CBOR</a></li>
+    <li><a class="dropdown-item" href="../articles/cose-webauthn.html">COSE and WebAuthn</a></li>
+  </ul></li>
 <li class="active nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
@@ -33,22 +40,17 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="0.0.0.9000" id="zucbor-0009000">zucbor 0.0.0.9000<a class="anchor" aria-label="anchor" href="#zucbor-0009000"></a></h2>
-<ul><li>Package skeleton: metadata, licence and build configuration.</li>
-<li>Bundles TinyCBOR 7.0 (<code>src/vendor/tinycbor</code>), verified byte-for-byte against the upstream release by <code>tools/verify-vendor</code>.</li>
+<h2 class="pkg-version" data-toc-text="0.1.0" id="zucbor-010">zucbor 0.1.0<a class="anchor" aria-label="anchor" href="#zucbor-010"></a></h2>
+<ul><li>Initial CRAN release.</li>
 <li>
-<code><a href="../reference/zucbor_info.html">zucbor_info()</a></code> reports the bundled TinyCBOR version, the ceiling on nesting depth and the default decoding limits.</li>
+<code><a href="../reference/cbor_decode.html">cbor_decode()</a></code>, <code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code>, <code><a href="../reference/cbor_read.html">cbor_read()</a></code> and <code><a href="../reference/cbor_read.html">cbor_read_seq()</a></code> turn CBOR (RFC 8949) and CBOR sequences (RFC 8742) into ordinary R values. The whole input is checked first – well-formedness, UTF-8, tag content, duplicate map keys (by value), and depth, size and item limits – so a length header can never make R allocate for data the input does not hold. Every fault is a classed condition inheriting <code>zucbor_error</code>.</li>
 <li>
-<code><a href="../reference/cbor_validate.html">cbor_validate()</a></code> checks that a raw vector holds well-formed, valid CBOR, or an RFC 8742 sequence, within depth, size and item limits, without building any R value. Duplicate map keys are refused by default, compared by value. <code>deterministic = TRUE</code> also requires RFC 8949 core deterministic encoding. Every fault is a classed condition inheriting <code>zucbor_error</code> (see <code><a href="../reference/zucbor-conditions.html">?"zucbor-conditions"</a></code>).</li>
+<code><a href="../reference/cbor_encode.html">cbor_encode()</a></code> and <code><a href="../reference/cbor_encode.html">cbor_encode_seq()</a></code> write RFC 8949 core deterministic encoding: identical R objects give identical bytes on every platform, and decoding then re-encoding deterministic input reproduces it exactly.</li>
 <li>
-<code><a href="../reference/cbor_decode.html">cbor_decode()</a></code> and <code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code> turn CBOR into ordinary R values, after the same whole-input check <code><a href="../reference/cbor_validate.html">cbor_validate()</a></code> runs. Arrays simplify to atomic vectors when their elements agree; maps with text keys become named lists; integers stay exact (<code>cbor_bigint</code> beyond 2^53); dates and times become <code>POSIXct</code> and <code>Date</code>. <code><a href="../reference/cbor_read.html">cbor_read()</a></code> and <code><a href="../reference/cbor_read.html">cbor_read_seq()</a></code> read from a file, URL or connection, never more than <code>max_size + 1</code> bytes.</li>
+<code><a href="../reference/cbor_validate.html">cbor_validate()</a></code> runs the check alone; <code><a href="../reference/cbor_diagnose.html">cbor_diagnose()</a></code> shows CBOR in RFC 8949 diagnostic notation, as the RFC’s own examples write it.</li>
 <li>
-<code><a href="../reference/cbor-values.html">cbor_map()</a></code>, <code><a href="../reference/cbor-values.html">cbor_tag()</a></code>, <code><a href="../reference/cbor-values.html">cbor_simple()</a></code> and <code><a href="../reference/cbor-values.html">cbor_bigint()</a></code> represent the values R has no native type for.</li>
-<li>
-<code><a href="../reference/cbor_encode.html">cbor_encode()</a></code> and <code><a href="../reference/cbor_encode.html">cbor_encode_seq()</a></code> write R values as CBOR in RFC 8949 core deterministic encoding: identical R objects give identical bytes on every platform. Whole doubles are written as integers, so a COSE algorithm identifier written as <code>-7</code> stays an integer.</li>
-<li>Decoding marks a one-element array with <code><a href="https://rdrr.io/r/base/AsIs.html" class="external-link">I()</a></code> and keeps booleans apart from numbers, so that decoding and re-encoding gives back the same bytes.</li>
-<li>
-<code><a href="../reference/cbor_diagnose.html">cbor_diagnose()</a></code> shows CBOR in RFC 8949 diagnostic notation, as the RFC’s own examples write it, after the same check as <code><a href="../reference/cbor_validate.html">cbor_validate()</a></code>.</li>
+<code><a href="../reference/cbor-values.html">cbor_map()</a></code>, <code><a href="../reference/cbor-values.html">cbor_tag()</a></code>, <code><a href="../reference/cbor-values.html">cbor_simple()</a></code> and <code><a href="../reference/cbor-values.html">cbor_bigint()</a></code> represent the values R has no native type for: maps with non-text keys, tagged items, simple values and integers beyond 2^53.</li>
+<li>Bundles the parser and validator of TinyCBOR 7.0; no system library is needed.</li>
 </ul></div>
   </main></div>
 

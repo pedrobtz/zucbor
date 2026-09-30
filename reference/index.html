@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">zucbor</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -15,7 +15,14 @@
     </button>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
-      <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../articles/zucbor.html">Get started</a></li>
+<li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/zucbor.html">Getting started with zucbor</a></li>
+    <li><a class="dropdown-item" href="../articles/untrusted.html">Decoding untrusted CBOR</a></li>
+    <li><a class="dropdown-item" href="../articles/cose-webauthn.html">COSE and WebAuthn</a></li>
+  </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
@@ -32,7 +39,7 @@
     </div>
 
     <div class="section level2">
-      <h2 id="all-functions">All functions<a class="anchor" aria-label="anchor" href="#all-functions"></a></h2>
+      <h2 id="decode">Decode<a class="anchor" aria-label="anchor" href="#decode"></a></h2>
 
 
 
@@ -43,31 +50,10 @@
 
       <dl><dt>
 
-          <code><a href="cbor-values.html">cbor_map()</a></code> <code><a href="cbor-values.html">cbor_tag()</a></code> <code><a href="cbor-values.html">cbor_simple()</a></code> <code><a href="cbor-values.html">cbor_bigint()</a></code>
-
-        </dt>
-        <dd>CBOR values without a native R type</dd>
-
-        <dt>
-
           <code><a href="cbor_decode.html">cbor_decode()</a></code> <code><a href="cbor_decode.html">cbor_decode_seq()</a></code>
 
         </dt>
         <dd>Decode CBOR</dd>
-
-        <dt>
-
-          <code><a href="cbor_diagnose.html">cbor_diagnose()</a></code>
-
-        </dt>
-        <dd>CBOR diagnostic notation</dd>
-
-        <dt>
-
-          <code><a href="cbor_encode.html">cbor_encode()</a></code> <code><a href="cbor_encode.html">cbor_encode_seq()</a></code>
-
-        </dt>
-        <dd>Encode R values as CBOR</dd>
 
         <dt>
 
@@ -85,6 +71,54 @@
 
         <dt>
 
+          <code><a href="cbor_diagnose.html">cbor_diagnose()</a></code>
+
+        </dt>
+        <dd>CBOR diagnostic notation</dd>
+      </dl></div><div class="section level2">
+      <h2 id="encode">Encode<a class="anchor" aria-label="anchor" href="#encode"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="cbor_encode.html">cbor_encode()</a></code> <code><a href="cbor_encode.html">cbor_encode_seq()</a></code>
+
+        </dt>
+        <dd>Encode R values as CBOR</dd>
+      </dl></div><div class="section level2">
+      <h2 id="values-without-an-r-type">Values without an R type<a class="anchor" aria-label="anchor" href="#values-without-an-r-type"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="cbor-values.html">cbor_map()</a></code> <code><a href="cbor-values.html">cbor_tag()</a></code> <code><a href="cbor-values.html">cbor_simple()</a></code> <code><a href="cbor-values.html">cbor_bigint()</a></code>
+
+        </dt>
+        <dd>CBOR values without a native R type</dd>
+      </dl></div><div class="section level2">
+      <h2 id="errors-and-build-information">Errors and build information<a class="anchor" aria-label="anchor" href="#errors-and-build-information"></a></h2>
+
+
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
           <code><a href="zucbor-conditions.html">zucbor-conditions</a></code>
 
         </dt>
@@ -96,8 +130,16 @@
 
         </dt>
         <dd>Build information</dd>
+
+        <dt>
+
+          <code><a href="zucbor-package.html">zucbor</a></code> <code><a href="zucbor-package.html">zucbor-package</a></code>
+
+        </dt>
+        <dd>zucbor: Deterministic and Secure CBOR Encoding and Decoding</dd>
       </dl></div>
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

@@ -1,0 +1,40 @@
+#!/bin/sh
+# Project C code compiles warning-free under strict flags (design section 14;
+# roadmap Stage 7). Vendored TinyCBOR is not held to this. The check first
+# compiles a planted warning and requires it to fail, since -fsyntax-only
+# alone exits 0 on warnings: a gate is trusted once it has been seen to fail.
+# Run from the package root.
+set -eu
+
+CC=${CC:-cc}
+RINC=$(Rscript -e 'cat(R.home("include"))')
+FLAGS="-std=gnu17 -DNDEBUG -Wall -Wextra -Wpedantic -Wshadow -Wstrict-prototypes -Werror -fsyntax-only"
+# R's and TinyCBOR's headers are -isystem: the gate is for zucbor's code.
+# R 4.6's R_ext/Boolean.h uses a C23 enum form that -Wpedantic rejects in
+# gnu17 (zujson met it too), and TinyCBOR's internal header, which
+# zu_tinycbor_check.c includes, uses _Float16, which GCC's -Wpedantic
+# rejects; vendored code is not held to this gate (design section 14).
+INC="-isystem $RINC -Isrc -Isrc/tinycbor -isystem src/vendor/tinycbor"
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+printf 'int zu_lint_canary(void) { int unused; return 0; }\n' > "$WORK/canary.c"
+if $CC $FLAGS "$WORK/canary.c" 2>/dev/null; then
+  echo "FAIL: the lint gate accepted a planted warning" >&2
+  exit 2
+fi
+
+fail=0
+for f in src/*.c; do
+  extra=""
+  # init.c casts each entry point to DL_FUNC, the registration idiom Writing R
+  # Extensions prescribes; -Wextra's function-cast check rejects it by design.
+  [ "$f" = src/init.c ] && extra="-Wno-cast-function-type"
+  $CC $FLAGS $extra $INC "$f" || fail=1
+done
+# The R-free build of the check phase, as the fuzzers compile it.
+for f in src/zu_walk.c src/zu_status.c src/zu_float.c fuzz/*.c; do
+  $CC $FLAGS -DZU_STANDALONE -Isrc -Isrc/tinycbor -isystem src/vendor/tinycbor "$f" || fail=1
+done
+[ $fail = 0 ] || { echo "FAIL: warnings in project C code" >&2; exit 1; }
+echo "==> project C code is warning-free under $FLAGS"

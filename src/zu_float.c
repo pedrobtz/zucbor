@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "zucbor.h"
+#include "zu_check.h"
 
 /* IEEE 754 binary16 to double, exactly: RFC 8949 Appendix D. Project code
  * rather than TinyCBOR's decode_half(), which is private to its translation

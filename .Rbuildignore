@@ -9,3 +9,5 @@
 ^src/.*\.o$
 ^src/.*\.(so|dll|dylib|a)$
 ^cran-comments\.md$
+^fuzz$
+^\.covrignore$

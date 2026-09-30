@@ -1,5 +1,5 @@
 #!/bin/sh
-# Fail if the vendored cbor.h has a CborError enumerator that src/zu_cond.c's
+# Fail if the vendored cbor.h has a CborError enumerator that src/zu_status.c's
 # status table lacks, or the table names one cbor.h does not have. R maps
 # faults to condition classes by these names, so a new upstream enumerator
 # must be added on purpose, not fall through (design section 10).
@@ -7,7 +7,7 @@
 set -eu
 
 HDR="src/vendor/tinycbor/cbor.h"
-TABLE="src/zu_cond.c"
+TABLE="src/zu_status.c"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 

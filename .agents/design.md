@@ -622,7 +622,10 @@ R/{decode,encode,read,validate,diagnose,classes,info,conditions,args,zu_source,z
 src/init.c
 src/zucbor.h                  internal prototypes
 src/zu_cond.c                 conditions, status names
-src/zu_walk.c                 check phase: walk, limits, duplicate keys, tag content
+src/zu_check.h                the check phase's interface, R-free (builds with -DZU_STANDALONE)
+src/zu_walk.c                 check phase: walk, limits, duplicate keys, tag content; R-free
+src/zu_status.c               CborError and zucbor status names; R-free
+src/zu_validate.c             cbor_validate()'s .Call entry point
 src/zu_build.c                build phase: §6
 src/zu_cbor.h                 internal prototypes that take TinyCBOR types
 src/zu_encode.c               §7, §8
@@ -639,6 +642,8 @@ src/vendor/PROVENANCE
 tools/update-tinycbor, tools/verify-vendor, tools/tinycbor-files.txt, tools/check-symbols,
 tools/check-status-table       zu_cond.c's CborError table == the vendored cbor.h's enum
 tools/sanitizer-exercise.R    base-R driver for the ASan containers
+tools/run-fuzz, tools/fuzz-seeds.R, tools/run-mutation-check, tools/run-lint, tools/check-no-network
+fuzz/                         libFuzzer targets, canary, arena, probe (not in the tarball)
 ```
 
 | layer | prefix |
@@ -696,7 +701,11 @@ Every row of the §6 and §7 tables has a test. The tables in the roxygen docs, 
 
 ### Fuzzing and native checks
 
-libFuzzer targets over the C layer, with a canary target that must crash first so the gate is seen to fail: `fuzz_check` (walk + validate), `fuzz_roundtrip` (decode → encode → decode must be a fixed point, through an R-free harness over the same C code) and `fuzz_diag`. Seeds from Appendix A and the fixtures. ASan + UBSan built with `-UNDEBUG` (§13, trap 3), valgrind, `rchk`, gctorture and LTO via `pedrobtz/r-actions`' `native-checks.yaml`, as `zujson` does.
+The check phase builds without R: `src/zu_check.h` declares it with no SEXP, and scratch memory, interrupt checks and "no offset" are three hooks (`zu_scratch()`, `zu_interrupt_check()`, `ZU_NO_OFFSET`). They are `R_alloc()`, `R_CheckUserInterrupt()` and `NA_REAL` in the package, and an arena, a no-op and `NAN` under `-DZU_STANDALONE`. That lets libFuzzer run `fuzz/fuzz_check.c` over the same `zu_walk.c` the package uses. The first input byte picks the options, and besides sanitizer findings the target traps on a broken monotonicity invariant: relaxing an option (deterministic, duplicate keys, depth, items, sequence) can only accept more. `fuzz/fuzz_canary.c` links the same code and must crash before any real target is trusted. Seeds are built from the embedded vectors and the conformance fixtures, the grown corpus is cached between CI runs, and runs last 2 minutes per pull request and 30 minutes nightly.
+
+The build, encode and diagnostic phases build R objects, so they are not libFuzzer targets. They are fuzzed through R instead: `tools/sanitizer-exercise.R` drives every phase over the vectors, truncations and random mutations in the ASan containers, and the property tests (§16, *Properties*) run under UBSan with `-UNDEBUG` (§13, trap 3). Valgrind, `rchk`, gctorture and LTO run through `pedrobtz/r-actions`' `native-checks.yaml`, as in `zujson`.
+
+`tools/run-mutation-check` disables each guard in the check phase, marked `/* GUARD: name */`, in a scratch copy, and requires its hostile input to get a different answer through `fuzz/probe.c`. Removing the container-depth guard does not merely change the answer, it overruns the walk's container stack, which is sized from `max_depth`, so that guard is also a memory-safety guard. `tools/run-lint` holds project C, R-free build included, to `-Wall -Wextra -Wpedantic -Wshadow -Werror`, after first seeing a planted warning fail. `tools/check-no-network` asserts that no test opens a URL or a socket.
 
 ---
 

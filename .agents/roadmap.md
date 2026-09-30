@@ -261,7 +261,7 @@ The core. Everything after it relies on what this stage guarantees.
 
 ## Stage 7 — Hardening · L
 
-**Status:** not started.
+**Status:** complete, apart from the cumulative 24 h of fuzzing, which the nightly job accrues on the cached corpus (30 minutes a night).
 
 **Do**
 - libFuzzer targets over the C layer: `fuzz_check`, `fuzz_roundtrip` (decode → encode → decode fixed point through an R-free harness), `fuzz_diag`. `fuzz/fuzz_canary.c` must crash through the same code path before any real target runs, and `tools/run-fuzz` exits non-zero if it does not. Capture the fuzzer's own exit status, not a pipe's (`zuxml` #35).
@@ -275,6 +275,16 @@ The core. Everything after it relies on what this stage guarantees.
 - 24 h of fuzzing per target, cumulative across CI runs, with no finding in project-owned code.
 - Every §16 security regression fails when its guard is removed.
 - Zero warnings from project-owned sources.
+
+**What actually happened**
+
+- **The check phase was made R-free, not the whole C layer.** The design wanted `fuzz_roundtrip` and `fuzz_diag` through "an R-free harness over the same C code", but build, encode and diagnose all make SEXPs. The check phase used R in only three places: scratch memory, interrupts and a missing offset. Those became hooks in `zu_check.h`, so `zu_walk.c` builds with `-DZU_STANDALONE` against an arena, byte-for-byte the code the package runs. That is the phase hostile input meets first. The R-bound phases are fuzzed through R (`tools/sanitizer-exercise.R`, the property tests), which design §16 now says.
+- **The fuzz target asserts more than "no crash".** Relaxing any option must never reject what the stricter setting accepted, and a check that passes must report exactly one item outside a sequence and no container count larger than the input. Apple's clang has no libFuzzer, so locally the target was built with ASan and UBSan and a file-driven `main()`. It replayed the 1,320-seed corpus and 30,000 random mutations of it clean, with every invariant holding. The canary crashed on the first valid seed.
+- **Every guard is load-bearing, and one guards memory too.** The mutation check disables eight guards in turn: items, duplicate keys, container depth, tag depth, length headers, bignum form, tag content, trailing bytes. Each hostile input's answer changes. Removing the container-depth guard makes the probe *abort*: the walk's container stack is sized from `max_depth`, so the limit check is what keeps it in bounds. The ninth marker, `odd-map`, is not probed: TinyCBOR already refuses a break in a map's value position, so nothing reaches it, and the script says so rather than claiming it.
+- **The mutation script was first seen to do nothing.** The duplicate-key guard's line ends in `{`, the first sed pattern did not match it, and the "mutant" was the original. It passed, vacuously. The script now refuses to continue when a mutant equals the original. The same lesson as zuxml's lint gate, learnt again.
+- **Lint's only finding was R's registration idiom.** With `-Wextra`, clang rejects `(DL_FUNC) &f`, which is exactly what Writing R Extensions prescribes. `init.c` alone gets `-Wno-cast-function-type`. Everything else, the standalone build included, is clean under `-Wall -Wextra -Wpedantic -Wshadow -Werror`.
+- **rchk found three things in Stage 4's encoder** while these stages were stacked: an attribute held across allocations in `as_is()` and in `encode()`, and a PROTECT inside a two-pass loop it could not balance. They were fixed on Stage 4's branch, and Stages 5–7 were rebased onto it.
+- `.covrignore` excludes the vendored sources, so the coverage badge reports project code.
 
 ---
 

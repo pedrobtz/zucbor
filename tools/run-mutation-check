@@ -1,0 +1,71 @@
+#!/bin/sh
+# Proves the check phase's security guards are not vacuous (roadmap Stage 7):
+# each guard in src/zu_walk.c, marked "/* GUARD: name */" on its if-line, is
+# disabled in turn in a scratch copy, and its hostile input must then get a
+# different answer. A guard whose removal changes nothing was never doing
+# anything. Checked through fuzz/probe.c, the R-free check phase, not the
+# test suite. Run from the package root.
+set -eu
+
+CC=${CC:-cc}
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+fail=0
+
+build() {  # build DIR OUT
+  $CC -std=gnu17 -O1 -DZU_STANDALONE -I"$1" -I"$1/tinycbor" -I"$1/vendor/tinycbor" \
+    fuzz/probe.c fuzz/arena.c "$1/zu_walk.c" "$1/zu_status.c" "$1/zu_float.c" \
+    "$1/vendor/tinycbor/cborparser.c" "$1/vendor/tinycbor/cborvalidation.c" \
+    "$1/vendor/tinycbor/cborerrorstrings.c" -o "$2"
+}
+
+# guard | hostile input (hex) | sequence det dup max_depth max_items | status with the guard
+cases='
+items|83010203|0 0 0 256 3|ZU_ERR_ITEM_LIMIT
+duplicate-keys|a201000100|0 0 0 256 1000|ZU_ERR_DUPLICATE_KEY
+depth-containers|818181818100|0 0 0 3 1000|ZU_ERR_DEPTH_LIMIT
+depth-tags|c6c6c6c6c600|0 0 0 3 1000|ZU_ERR_DEPTH_LIMIT
+length-headers|9bffffffffffffffff|0 0 0 256 1000|CborErrorUnexpectedEOF
+bignum-preferred|c24101|0 1 0 256 1000|ZU_ERR_BIGNUM_NOT_PREFERRED
+tag-content|c16161|0 0 0 256 1000|CborErrorInappropriateTagForType
+trailing-bytes|0102|0 0 0 256 1000|CborErrorGarbageAtEnd
+'
+# odd-map is defence in depth: TinyCBOR already refuses a break in a map's
+# value position, so no input reaches it and removing it cannot be observed.
+
+build src "$WORK/probe-original"
+echo "$cases" | while IFS='|' read -r guard hex opts want; do
+  [ -n "$guard" ] || continue
+  got=$("$WORK/probe-original" "$hex" $opts)
+  if [ "$got" != "$want" ]; then
+    echo "FAIL: $guard: $hex gives $got with the guard, expected $want" >&2
+    echo 1 > "$WORK/failed"
+    continue
+  fi
+  n=$(grep -c "GUARD: $guard \*/" src/zu_walk.c || true)
+  if [ "$n" != 1 ]; then
+    echo "FAIL: $guard: found $n guard markers in src/zu_walk.c, expected 1" >&2
+    echo 1 > "$WORK/failed"
+    continue
+  fi
+  rm -rf "$WORK/src"
+  cp -R src "$WORK/src"
+  sed "s|if (\(.*\))\( *{\)\{0,1\} */\* GUARD: $guard \*/|if (0 \&\& (\1))\2|" src/zu_walk.c > "$WORK/src/zu_walk.c"
+  if cmp -s src/zu_walk.c "$WORK/src/zu_walk.c"; then
+    echo "FAIL: $guard: the mutation did not apply" >&2
+    echo 1 > "$WORK/failed"
+    continue
+  fi
+  build "$WORK/src" "$WORK/probe-$guard"
+  # A mutant may crash: without its guard, the depth check's container stack
+  # (sized by max_depth) overflows. That is a changed outcome too.
+  mutant=$("$WORK/probe-$guard" "$hex" $opts 2>/dev/null) || mutant="a crash (exit $?)"
+  if [ "$mutant" = "$want" ]; then
+    echo "FAIL: $guard: removing the guard changes nothing ($hex still gives $want)" >&2
+    echo 1 > "$WORK/failed"
+  else
+    echo "==> $guard: $want with the guard, $mutant without"
+  fi
+done
+[ ! -f "$WORK/failed" ] || exit 1
+echo "==> every guard is load-bearing"

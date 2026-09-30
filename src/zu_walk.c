@@ -6,6 +6,8 @@
  * deterministic encoding. Nothing here allocates an R object. Scratch comes
  * from R_alloc(), which R releases when the .Call returns or unwinds, so an
  * interrupt or an allocation failure cannot leak it (design section 12).
+ * No other R API is used here: built with -DZU_STANDALONE, zu_scratch() is
+ * the fuzz harness's arena (zu_check.h).
  *
  * TinyCBOR's preconditions are cbor_assert()s that become unreachable()
  * under R's -DNDEBUG (design section 13, trap 3): every accessor below is
@@ -14,7 +16,7 @@
 #include <math.h>
 #include <string.h>
 
-#include "zucbor.h"
+#include "zu_check.h"
 #include "cbor.h"
 
 /* Validity checks every read path shares (design section 11). Two checks
@@ -69,7 +71,7 @@ typedef struct {
 
 static double offset_of(const zu_walker *w, const uint8_t *at)
 {
-    return at ? (double)(at - w->buf) : NA_REAL;
+    return at ? (double)(at - w->buf) : ZU_NO_OFFSET;
 }
 
 static int fail(zu_walker *w, const char *status, const char *detail,
@@ -79,7 +81,7 @@ static int fail(zu_walker *w, const char *status, const char *detail,
     w->fault->detail = detail;
     w->fault->offset = offset_of(w, at);
     w->fault->limit = NULL;
-    w->fault->limit_value = NA_REAL;
+    w->fault->limit_value = ZU_NO_OFFSET;
     return 1;
 }
 
@@ -105,7 +107,7 @@ static int fail_limit(zu_walker *w, const char *status, const char *limit,
 static void *grow(void *old, size_t used, size_t *cap, size_t size)
 {
     size_t newcap = *cap ? *cap * 2 : 64;
-    void *p = R_alloc(newcap, (int)size);
+    void *p = zu_scratch(newcap, size);
     if (used)
         memcpy(p, old, used * size);
     *cap = newcap;
@@ -115,11 +117,11 @@ static void *grow(void *old, size_t used, size_t *cap, size_t size)
 static int count_item(zu_walker *w, const uint8_t *at)
 {
     w->items++;
-    if (w->items > w->opt->max_items)
+    if (w->items > w->opt->max_items)  /* GUARD: items */
         return fail_limit(w, ZU_ERR_ITEM_LIMIT, "max_items",
                           (double)w->opt->max_items, at);
     if (w->items % ZU_INTERRUPT_EVERY == 0)
-        R_CheckUserInterrupt();
+        zu_interrupt_check();
     return 0;
 }
 
@@ -155,7 +157,7 @@ static int key_cmp(const zu_key *a, const zu_key *b)
  * quadratic on an adversarial order, and the keys are the adversary's. */
 static void sort_keys(zu_key *a, size_t n)
 {
-    zu_key *tmp = (zu_key *) R_alloc(n, sizeof(zu_key));
+    zu_key *tmp = (zu_key *) zu_scratch(n, sizeof(zu_key));
     zu_key *src = a, *dst = tmp;
     for (size_t width = 1; width < n; width *= 2) {
         for (size_t lo = 0; lo < n; lo += 2 * width) {
@@ -185,7 +187,7 @@ static int check_duplicates(zu_walker *w, size_t base)
     zu_key *k = w->keys + base;
     sort_keys(k, n);
     for (size_t i = 1; i < n; i++) {
-        if (key_cmp(&k[i - 1], &k[i]) == 0) {
+        if (key_cmp(&k[i - 1], &k[i]) == 0) {  /* GUARD: duplicate-keys */
             size_t later = k[i].offset > k[i - 1].offset ? k[i].offset : k[i - 1].offset;
             return fail(w, ZU_ERR_DUPLICATE_KEY, NULL, w->buf + later);
         }
@@ -234,7 +236,7 @@ static void element_done(zu_walker *w)
 static int open_container(zu_walker *w, CborValue *it, const uint8_t *start, int tags)
 {
     int is_map = cbor_value_is_map(it);
-    if (w->depth + 1 > w->opt->max_depth)
+    if (w->depth + 1 > w->opt->max_depth)  /* GUARD: depth-containers */
         return fail_limit(w, ZU_ERR_DEPTH_LIMIT, "max_depth", w->opt->max_depth, start);
 
     /* Every element costs at least one byte, so a length the rest of the
@@ -244,7 +246,7 @@ static int open_container(zu_walker *w, CborValue *it, const uint8_t *start, int
         size_t n, avail = (size_t)(w->end - start);
         CborError err = is_map ? cbor_value_get_map_length(it, &n)
                                : cbor_value_get_array_length(it, &n);
-        if (err || n > avail / (is_map ? 2 : 1))
+        if (err || n > avail / (is_map ? 2 : 1))  /* GUARD: length-headers */
             return fail_cbor(w, CborErrorUnexpectedEOF, start);
     }
 
@@ -271,7 +273,7 @@ static int close_container(zu_walker *w, CborValue *top)
 {
     zu_frame *f = &w->frames[w->sp - 1];
     if (f->type == CborMapType) {
-        if (f->count % 2)
+        if (f->count % 2)  /* GUARD: odd-map */
             return fail(w, ZU_ERR_ODD_MAP, NULL, cbor_value_get_next_byte(&f->it));
         if (!w->opt->duplicate_keys) {
             if (check_duplicates(w, f->key_base))
@@ -337,7 +339,7 @@ static int walk_string(zu_walker *w, CborValue *it, int want_content,
 
     /* One chunk is already contiguous in the input; more are joined. */
     if (want_content && chunks > 1) {
-        uint8_t *joined = (uint8_t *) R_alloc(*total ? *total : 1, 1);
+        uint8_t *joined = (uint8_t *) zu_scratch(*total ? *total : 1, 1);
         size_t at = 0;
         (void) cbor_value_begin_string_iteration(&first);
         for (;;) {
@@ -382,7 +384,7 @@ static int tag_content_ok(CborTag tag, CborType type)
 static int check_bignum(zu_walker *w, const uint8_t *content, size_t n,
                         const uint8_t *start)
 {
-    if (n == 0 || content[0] == 0 || n <= 8)
+    if (n == 0 || content[0] == 0 || n <= 8)  /* GUARD: bignum-preferred */
         return fail(w, ZU_ERR_BIGNUM_NOT_PREFERRED, NULL, start);
     return 0;
 }
@@ -401,7 +403,7 @@ static int walk_element(zu_walker *w, CborValue *it)
     while (cbor_value_is_tag(it)) {
         if (count_item(w, cbor_value_get_next_byte(it)))
             return 1;
-        if (w->depth + 1 > w->opt->max_depth)
+        if (w->depth + 1 > w->opt->max_depth)  /* GUARD: depth-tags */
             return fail_limit(w, ZU_ERR_DEPTH_LIMIT, "max_depth", w->opt->max_depth,
                               cbor_value_get_next_byte(it));
         w->depth++;
@@ -411,7 +413,7 @@ static int walk_element(zu_walker *w, CborValue *it)
         err = cbor_value_advance_fixed(it);
         if (err)
             return fail_cbor(w, err, cbor_value_get_next_byte(it));
-        if (!tag_content_ok(tag, cbor_value_get_type(it)))
+        if (!tag_content_ok(tag, cbor_value_get_type(it)))  /* GUARD: tag-content */
             return fail_cbor(w, CborErrorInappropriateTagForType, tag_at);
     }
     if (count_item(w, cbor_value_get_next_byte(it)))
@@ -551,7 +553,7 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
     w.opt = opt;
     w.fault = fault;
     w.plan = plan;
-    w.frames = (zu_frame *) R_alloc((size_t)opt->max_depth + 1, sizeof(zu_frame));
+    w.frames = (zu_frame *) zu_scratch((size_t)opt->max_depth + 1, sizeof(zu_frame));
     fault->status = NULL;
     if (plan) {
         plan->counts = NULL;
@@ -586,29 +588,8 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
         pos = (size_t)(cbor_value_get_next_byte(&it) - buf);
         if (plan)
             plan->n_items++;
-        if (!opt->sequence && pos < len)
+        if (!opt->sequence && pos < len)  /* GUARD: trailing-bytes */
             return fail_cbor(&w, CborErrorGarbageAtEnd, buf + pos);
     }
     return 0;
-}
-
-SEXP zucbor_check(SEXP x, SEXP sequence, SEXP deterministic,
-                  SEXP duplicate_keys, SEXP max_depth, SEXP max_items)
-{
-    if (TYPEOF(x) != RAWSXP)
-        Rf_error("zucbor_check: x must be a raw vector");
-    zu_check_opts opt;
-    opt.sequence = Rf_asLogical(sequence) == TRUE;
-    opt.deterministic = Rf_asLogical(deterministic) == TRUE;
-    opt.duplicate_keys = Rf_asLogical(duplicate_keys) == TRUE;
-    opt.max_depth = Rf_asInteger(max_depth);
-    double mi = Rf_asReal(max_items);
-    if (opt.max_depth < 1 || opt.max_depth > ZU_MAX_DEPTH_CAP || ISNAN(mi) || mi < 1)
-        Rf_error("zucbor_check: limits must be validated in R");
-    opt.max_items = R_FINITE(mi) ? (uint64_t) mi : UINT64_MAX;
-
-    zu_fault fault;
-    if (zu_check(RAW(x), (size_t) XLENGTH(x), &opt, NULL, &fault))
-        return zu_fault_sexp(&fault);
-    return R_NilValue;
 }

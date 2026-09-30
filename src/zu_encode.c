@@ -443,12 +443,15 @@ static void encode(zu_encoder *e, SEXP x, int depth)
         if (is_class(x, "POSIXlt"))
             fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE, "POSIXlt has no CBOR form; use as.POSIXct()");
         R_xlen_t n = XLENGTH(x);
-        SEXP names = Rf_getAttrib(x, R_NamesSymbol);
+        /* PROTECTed although reachable through x: rchk cannot see that. */
+        SEXP names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
         if (check_names(e, names, n)) {
             check_depth(e, depth);
             put_map(e, R_NilValue, names, x, n, depth + 1);
+            UNPROTECT(1);
             return;
         }
+        UNPROTECT(1);
         if (unboxed(e, x)) {
             encode_element(e, x, 0, depth);
             return;
@@ -484,12 +487,14 @@ static void encode(zu_encoder *e, SEXP x, int depth)
         if (is_class(x, "POSIXlt"))
             fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE, "POSIXlt has no CBOR form; use as.POSIXct()");
         R_xlen_t n = XLENGTH(x);
-        SEXP names = Rf_getAttrib(x, R_NamesSymbol);
+        SEXP names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
         check_depth(e, depth);
         if (check_names(e, names, n)) {
             put_map(e, R_NilValue, names, x, n, depth + 1);
+            UNPROTECT(1);
             return;
         }
+        UNPROTECT(1);
         put_head(e, 4, (uint64_t) n);
         for (R_xlen_t i = 0; i < n; i++)
             encode(e, VECTOR_ELT(x, i), depth + 1);
@@ -525,28 +530,28 @@ SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call)
         Rf_error("zucbor_encode: limits must be validated in R");
 
     R_xlen_t items = sequence ? XLENGTH(x) : 1;
-    for (int pass = 0; pass < 2; pass++) {
-        SEXP out = R_NilValue;
-        if (pass == 1) {
-            if (e.pos > (size_t) R_XLEN_T_MAX)
-                fail_encode(&e, ZU_ERR_INVALID_VALUE, "the encoding is longer than an R vector can be");
-            out = PROTECT(Rf_allocVector(RAWSXP, (R_xlen_t) e.pos));
-            e.out = RAW(out);
-        }
-        e.pos = 0;
-        for (R_xlen_t i = 0; i < items; i++) {
-            if (self_describe) {
-                const uint8_t tag[] = {0xd9, 0xd9, 0xf7};
-                put(&e, tag, 3);
-            }
-            encode(&e, sequence ? VECTOR_ELT(x, i) : x, 1);
-        }
-        if (pass == 1) {
-            UNPROTECT(1);
-            return out;
-        }
+    const uint8_t describe[] = {0xd9, 0xd9, 0xf7};
+
+    /* Measure: nothing is written, every write only counts. */
+    for (R_xlen_t i = 0; i < items; i++) {
+        if (self_describe)
+            put(&e, describe, 3);
+        encode(&e, sequence ? VECTOR_ELT(x, i) : x, 1);
     }
-    return R_NilValue;
+    if (e.pos > (size_t) R_XLEN_T_MAX)
+        fail_encode(&e, ZU_ERR_INVALID_VALUE, "the encoding is longer than an R vector can be");
+
+    /* Write, into exactly that many bytes. */
+    SEXP out = PROTECT(Rf_allocVector(RAWSXP, (R_xlen_t) e.pos));
+    e.out = RAW(out);
+    e.pos = 0;
+    for (R_xlen_t i = 0; i < items; i++) {
+        if (self_describe)
+            put(&e, describe, 3);
+        encode(&e, sequence ? VECTOR_ELT(x, i) : x, 1);
+    }
+    UNPROTECT(1);
+    return out;
 }
 
 /* Test hook, design section 16: every binary16 pattern, decoded to a double

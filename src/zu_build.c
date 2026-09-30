@@ -388,14 +388,16 @@ static SEXP as_is(SEXP x)
     if (XLENGTH(x) != 1)
         return x;
     PROTECT(x);
-    SEXP old = Rf_getAttrib(x, R_ClassSymbol);
+    /* Reachable through x, but PROTECTed anyway: rchk cannot see
+     * reachability through an attribute (zujson learned this first). */
+    SEXP old = PROTECT(Rf_getAttrib(x, R_ClassSymbol));
     R_xlen_t n = old == R_NilValue ? 0 : XLENGTH(old);
     SEXP klass = PROTECT(Rf_allocVector(STRSXP, n + 1));
     SET_STRING_ELT(klass, 0, Rf_mkChar("AsIs"));
     for (R_xlen_t i = 0; i < n; i++)
         SET_STRING_ELT(klass, i + 1, STRING_ELT(old, i));
     Rf_setAttrib(x, R_ClassSymbol, klass);
-    UNPROTECT(2);
+    UNPROTECT(3);
     return x;
 }
 

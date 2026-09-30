@@ -189,7 +189,22 @@ void zu_format_double(double d, char *buf)
         } else {
             *o++ = '0';
         }
-        snprintf(o, 8, "e%c%d", n - 1 < 0 ? '-' : '+', abs(n - 1));
+        /* The exponent by hand: at most three digits, and GCC's
+         * -Wformat-truncation cannot prove a snprintf() into this tail safe,
+         * which R CMD check reports as a WARNING. */
+        int x = n - 1;
+        *o++ = 'e';
+        *o++ = x < 0 ? '-' : '+';
+        x = abs(x);
+        char d[4];
+        int k = 0;
+        do {
+            d[k++] = (char)('0' + x % 10);
+            x /= 10;
+        } while (x);
+        while (k)
+            *o++ = d[--k];
+        *o = '\0';
     }
 }
 

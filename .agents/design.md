@@ -61,7 +61,7 @@ The package decodes and encodes CBOR. It does not verify signatures, parse CDDL,
 
 - C99, MIT licensed, no dependencies, a dozen small files;
 - a **non-allocating** parser and encoder on the paths used here: it works in the caller's buffer, so every byte of heap state is ours to own (§12);
-- `cbor_value_validate()` covers well-formedness, UTF-8 validity, the content type of the tags it knows, and the canonical-form checks, as one audited function;
+- `cbor_value_validate()` covers UTF-8 validity and the canonical-form checks as one audited function, and its iterator reports well-formedness faults with their positions;
 - the encoder measures what it could not write (`cbor_encoder_get_extra_bytes_needed()`), which allows exact-size output with no reallocation (§8);
 - it is maintained — 7.0 (2026-02) carries fixes from outside security review — and small enough to audit.
 
@@ -70,6 +70,7 @@ What it does **not** give us, so the package must:
 - **Limits.** Its only bound is the compile-time recursion cap `CBOR_PARSER_MAX_RECURSIONS` (1024, which admits 1023 levels; §11). Depth, size and item limits are ours (§11).
 - **Duplicate-key detection in unsorted maps.** `CborValidateMapKeysAreUnique` compares neighbours, so it detects duplicates only in a map already sorted. Detection is ours (§6.5).
 - **Error positions.** `cbor_value_validate()` takes a `const CborValue *` and returns a status only. Offsets come from our own walk (§10).
+- **Correct tag-content rules.** `CborValidateTagUse` checks a table that allows only an integer under tag 1, where RFC 8949 §3.4.2 also allows a float, so it refuses Appendix A's `1(1363896240.5)`; the same table refuses anything but a byte string, array or map under tags 21–23, which RFC 8949 §3.4.5.2 lets wrap any item. The walk checks tag content instead (§11), found at Stage 2.
 - **Semantic tag conversion**, shortest-float selection and map-key sorting on encode. Its encoder writes what it is told.
 
 ---
@@ -114,7 +115,7 @@ cbor_decode(x, ...)          # raw -> R value; exactly one data item
 cbor_decode_seq(x, ...)      # raw -> list; an RFC 8742 sequence of zero or more items
 cbor_read(file, ...)         # path or connection -> R value
 cbor_read_seq(file, ...)     # path or connection -> list
-cbor_validate(x, sequence = FALSE, ...)  # raw -> TRUE/FALSE; the check phase only
+cbor_validate(x, sequence = FALSE, ..., error = FALSE)  # raw -> TRUE/FALSE; the check phase only
 cbor_diagnose(x, sequence = FALSE, ...)  # raw -> character(1), RFC 8949 §8 diagnostic notation
 
 # encode
@@ -153,7 +154,7 @@ cbor_decode(
 )
 ```
 
-`cbor_decode_seq()`, `cbor_read()`, `cbor_read_seq()` take the same arguments. `cbor_validate()` and `cbor_diagnose()` take `deterministic`, `duplicate_keys` and the three limits; the mapping arguments have no meaning for them.
+`cbor_decode_seq()`, `cbor_read()`, `cbor_read_seq()` take the same arguments. `cbor_validate()` and `cbor_diagnose()` take `deterministic`, `duplicate_keys` and the three limits; the mapping arguments have no meaning for them. `cbor_validate(error = TRUE)` raises the fault's classed condition (§10) instead of returning `FALSE`, so a caller can learn *why* without building the value; added at Stage 2, when the tests needed exactly that.
 
 `x` must be a raw vector. A character string is refused with `zucbor_invalid_argument`: CBOR is bytes, and a string would need an encoding decision that has no right answer. `file` is a path, a URL, or a connection (§9).
 
@@ -469,7 +470,7 @@ zucbor_error
 
 Every decode-side condition carries:
 
-- `offset` — the 0-based byte offset of the item at fault, or `NA` when only `cbor_value_validate()` saw the fault (it reports no position; §3);
+- `offset` — the 0-based byte offset of the item at fault, or `NA` when only `cbor_value_validate()` saw the fault (it reports no position; §3). Since Stage 2 that is only invalid UTF-8 and the deterministic-encoding checks; everything else, tag content included, is the walk's and has an offset;
 - `status` — the TinyCBOR enumerator's **name** (`"CborErrorUnexpectedEOF"`), or zucbor's own (`"ZU_ERR_DUPLICATE_KEY"`);
 - for a limit error, `limit` (the argument's name) and `limit_value`;
 - for `zucbor_invalid_argument`, `arg`.
@@ -510,7 +511,21 @@ A limit is a positive whole number, or `Inf` for `max_size` and `max_items` (the
 
 **`deterministic = TRUE`** adds `CborValidateCanonicalFormat` to the validation flags and makes the walk reject a bignum whose value fits a plain integer (RFC 8949 §3.4.3). It is for inputs that are about to be hashed or signed again, where a second encoding of the same value is an attack surface.
 
-The validation flags otherwise are `CborValidateUtf8 | CborValidateTagUse`, used by every read path through one constant (`ZU_VALIDATE_FLAGS`), so `cbor_decode()` and `cbor_validate()` cannot disagree about the bytes (the `ZUJSON_READ_FLAGS` rule). Trailing bytes are checked by the walk, not by `CborValidateCompleteData`: a sequence validates item by item, where the next item's bytes are not garbage, and one check in one place serves both.
+The validation flags otherwise are `CborValidateUtf8` alone, used by every read path through one constant (`ZU_VALIDATE_FLAGS`), so `cbor_decode()` and `cbor_validate()` cannot disagree about the bytes (the `ZUJSON_READ_FLAGS` rule). Two checks TinyCBOR offers are the walk's instead:
+
+- **Trailing bytes**, not `CborValidateCompleteData`: a sequence validates item by item, where the next item's bytes are not garbage, and one check in one place serves both.
+- **Tag content**, not `CborValidateTagUse` (§3): each tag's content type is checked as the walk meets it, against TinyCBOR's table with its two errors corrected, plus the tags zucbor converts. A restricted tag wrapping another tag is refused, since a tag is not any of the types it allows.
+
+| tag | content required |
+|---|---|
+| 0, 32–36, 1004 | text string |
+| 1 | integer or float |
+| 2, 3, 24 | byte string |
+| 4, 5, 16–18, 96–98 | array |
+| 100 | integer |
+| any other, including 21–23 and 55799 | anything |
+
+Status `CborErrorInappropriateTagForType`, class `zucbor_invalid_error`, with the tag's offset.
 
 ---
 
@@ -590,11 +605,11 @@ Named here so CI does not have to discover them:
 ## 15. Layout and naming
 
 ```text
-R/{decode,encode,read,validate,diagnose,classes,info,conditions,zu_source,zucbor-package}.R
+R/{decode,encode,read,validate,diagnose,classes,info,conditions,args,zu_source,zucbor-package}.R
 src/init.c
 src/zucbor.h                  internal prototypes
 src/zu_cond.c                 conditions, status names
-src/zu_walk.c                 check phase: walk, limits, duplicate keys
+src/zu_walk.c                 check phase: walk, limits, duplicate keys, tag content
 src/zu_build.c                build phase: §6
 src/zu_encode.c               §7, §8
 src/zu_float.c                width selection, half conversion
@@ -607,7 +622,9 @@ src/zu_info.c                 zucbor_info(): version, cap, self-test
 src/tinycbor/                 project-owned generated headers (§13)
 src/vendor/tinycbor/          verbatim subset
 src/vendor/PROVENANCE
-tools/update-tinycbor, tools/verify-vendor, tools/tinycbor-files.txt, tools/check-symbols
+tools/update-tinycbor, tools/verify-vendor, tools/tinycbor-files.txt, tools/check-symbols,
+tools/check-status-table       zu_cond.c's CborError table == the vendored cbor.h's enum
+tools/sanitizer-exercise.R    base-R driver for the ASan containers
 ```
 
 | layer | prefix |
@@ -716,7 +733,7 @@ CBOR has no number parsing or escape processing, so being slower than the JSON s
 1. **CTAP2 canonical order.** CTAP2 requires RFC 7049 length-first key order; RFC 8949 deterministic encoding is bytewise. They differ (e.g. `24` versus `-1`). Decoding CTAP2 data needs nothing, since signatures cover bytes, not re-encodings. An authenticator emulator would need a `key_order` argument. Add it when a caller asks.
 2. **UUID and URI tags.** Converting 37 to a `cbor_uuid` class and 32 to a character vector, or leaving both as `cbor_tag`. Decide on use.
 3. **Data frames.** Encode row-oriented as `zujson` does, and decode arrays of text-keyed maps opt-in. Deferred to keep v1's mapping small; SenML users are the likely askers.
-4. **Validation offsets.** `cbor_value_validate()` reports no position, so a UTF-8 or tag-content error has `offset = NA`. Validating per item from the walk would recover it at some cost to throughput. Measure first.
+4. **Validation offsets.** `cbor_value_validate()` reports no position, so a UTF-8 or deterministic-encoding error has `offset = NA` (tag content moved to the walk at Stage 2 and has one). Validating per item from the walk would recover it at some cost to throughput. Measure first.
 5. **The bignum conversion cap** (128 bytes, §6.6). Revisit if a protocol uses larger integers as numbers rather than as opaque bytes.
 6. **A C API for siblings.** `zucrypt` (COSE signing) or `zuhttp` (`application/cbor`) may want CBOR from C. Design it only once one of them has a concrete need, following `zukomp`'s registered-table pattern (`zujson` §15).
 7. ~~**GCC < 11**~~ Closed at Stage 1 (2026-09-30): 7.0 is still upstream's newest release, so it ships, and the README states the GCC ≥ 11 requirement. Decision 23.

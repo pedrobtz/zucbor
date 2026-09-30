@@ -1,0 +1,65 @@
+# The C boundary is where this package has to be strict: it vendors a C
+# parser and points it at untrusted input. These jobs make the robustness
+# claims testable rather than asserted (design sections 12 and 16).
+#
+# paths-ignore skips the workflow for prose-only changes. man/ is left out of
+# it on purpose: R CMD check runs the examples, and valgrind runs them
+# instrumented.
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - '**.md'
+      - 'vignettes/**'
+      - '_pkgdown.yml'
+      - '.agents/**'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'vignettes/**'
+      - '_pkgdown.yml'
+      - '.agents/**'
+      - 'docs/**'
+  schedule:
+    # Weekly, so a latent problem surfaces without waiting for a push.
+    - cron: "0 4 * * 3"
+  workflow_dispatch:
+
+name: native-checks
+
+permissions: read-all
+
+jobs:
+  # UBSan over the whole suite on a runner, plus the ASan containers running
+  # tools/sanitizer-exercise.R (base R only: the images carry no testthat).
+  #
+  # -UNDEBUG rides in extra-ubsan-checks, which is appended to CFLAGS after
+  # R's -DNDEBUG. Under NDEBUG, TinyCBOR's cbor_assert() is unreachable(), so
+  # a violated precondition is silent undefined behaviour; with it undefined,
+  # the same violation is an assert() that aborts the job (design section 13,
+  # trap 3). It applies to the runner job and the clang ASan container.
+  sanitizers:
+    uses: pedrobtz/r-actions/.github/workflows/sanitizers.yml@v1
+    with:
+      asan: true
+      asan-dependencies: false
+      asan-run: Rscript tools/sanitizer-exercise.R
+      extra-ubsan-checks: -UNDEBUG
+
+  valgrind:
+    uses: pedrobtz/r-actions/.github/workflows/valgrind.yml@v1
+
+  lto:
+    uses: pedrobtz/r-actions/.github/workflows/lto.yml@v1
+
+  gctorture:
+    uses: pedrobtz/r-actions/.github/workflows/gctorture.yml@v1
+    with:
+      step: 100
+
+  # Blocking from the first run: the C code is new, so any finding is ours.
+  rchk:
+    uses: pedrobtz/r-actions/.github/workflows/rchk.yml@v1
+    with:
+      fail-on-findings: true

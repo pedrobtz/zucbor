@@ -1,6 +1,6 @@
 Package: zucbor
 Title: Deterministic and Secure CBOR Encoding and Decoding
-Version: 0.1.0
+Version: 0.0.0.9000
 Authors@R: c(
     person("Pedro", "Baltazar", , "pedrobtz@gmail.com",
            role = c("aut", "cre", "cph")),

@@ -17,7 +17,7 @@ Intended properties that should shape every design decision:
 
 The plan is written: [.agents/design.md](.agents/design.md) is the specification (numbered §1–§20: the R mapping in §6–§7, deterministic encoding §8, errors §10, limits §11, TinyCBOR vendoring and its build traps §13, open questions §19) and [.agents/roadmap.md](.agents/roadmap.md) sequences it into Stages 0–9, each with a **Status:** line. Progress is tracked in the `v0.1.0` milestone: umbrella issue #4, with one `stage` sub-issue per stage (#5 for Stage 0 through #14 for Stage 9), each linking to its heading anchor. Never put status in a stage heading, since that changes the anchor. Read both before starting work; a decision in design §18 is settled unless the work shows it is wrong, and then the design changes in the same commit.
 
-Stages 0–8 are done; version 0.1.0 is prepared, and Stage 9's remaining steps (tag `v0.1.0`, submit to CRAN, answer reviewers) are a human's. The roadmap's Stage 9 table maps each design §20 acceptance criterion to what verifies it.
+Stages 0–8 are done. `main` carries `0.0.0.9000`, the never-released development version; Stage 9's remaining steps are a human's: set `Version: 0.1.0` and the `NEWS.md` heading, tag `v0.1.0`, submit to CRAN, answer reviewers. The roadmap's Stage 9 table maps each design §20 acceptance criterion to what verifies it.
 
 **API:** `cbor_decode()`/`cbor_decode_seq()`, `cbor_read()`/`cbor_read_seq()`, `cbor_validate()`, `cbor_diagnose()`, `cbor_encode()`/`cbor_encode_seq()`, the value classes `cbor_map()`, `cbor_tag()`, `cbor_simple()`, `cbor_bigint()`, and `zucbor_info()`.
 
@@ -83,7 +83,7 @@ Workflows in `.github/workflows/` delegate to reusable workflows in `pedrobtz/r-
 
 - `R-CMD-check.yaml` runs a **quick** profile on each push to a pull request and the **full** profile on pushes to `main`. Adding the `full-ci` label to a PR reruns it with the full profile before merging.
 - `coverage.yaml` commits the badge to `.github/badges/coverage.svg` on `main`.
-- `pkgdown.yaml` builds the site and deploys `docs/` to `gh-pages` (https://pedrobtz.github.io/zucbor/).
+- `pkgdown.yaml` builds the site and deploys `docs/` to `gh-pages` (https://pedrobtz.github.io/zucbor/). `_pkgdown.yml` sets `development: mode: auto`, which decides from the version: `0.0.0.9000` (never released, now) builds at the root marked *unreleased*; a release (`0.1.0`) builds at the root; a later development version (`0.1.0.9000`) builds into `dev/`, and the deploy keeps both (`clean: false`). So after each CRAN release, bump `main` to `x.y.z.9000` (with a matching `NEWS.md` heading).
 - `vendor.yaml`: the vendored-tree guard, the shared-object symbol check and the status-table check.
 - `native-checks.yaml`: UBSan and ASan (with `-UNDEBUG`), valgrind, LTO, gctorture (quick step on PRs), a blocking `rchk`, and the `conformance` job.
 - `hardening.yaml`: `tools/run-lint`, `tools/run-mutation-check`, `tools/check-no-network`, and `tools/run-fuzz` (libFuzzer, canary first; 2 minutes per PR, 30 nightly on a cached corpus). Apple's clang has no libFuzzer.

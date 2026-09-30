@@ -17,7 +17,20 @@ Intended properties that should shape every design decision:
 
 The plan is written: [.agents/design.md](.agents/design.md) is the specification (numbered §1–§20: the R mapping in §6–§7, deterministic encoding §8, errors §10, limits §11, TinyCBOR vendoring and its build traps §13, open questions §19) and [.agents/roadmap.md](.agents/roadmap.md) sequences it into Stages 0–9, each with a **Status:** line. Progress is tracked in the `v0.1.0` milestone: umbrella issue #4, with one `stage` sub-issue per stage (#5 for Stage 0 through #14 for Stage 9), each linking to its heading anchor. Never put status in a stage heading, since that changes the anchor. Read both before starting work; a decision in design §18 is settled unless the work shows it is wrong, and then the design changes in the same commit.
 
-Stage 0 is done: `DESCRIPTION` and the licence files are real, `NEWS.md` has a versioned heading (R CMD check NOTEs a bare `# zucbor (development version)` once it is the only heading, so keep it versioned), and `tests/testthat/test-init.R` replaces the template test. `README.md` is still the template (Stage 8), there is no R API, and TinyCBOR is not vendored yet (Stage 1). `src/init.c` registers the DLL with an empty `.Call` table; each new entry point goes in that table (`@useDynLib zucbor, .registration = TRUE` with `R_useDynamicSymbols(dll, FALSE)`, so an unregistered symbol is not callable).
+Stages 0–1 are done. TinyCBOR 7.0 is vendored in `src/vendor/tinycbor/` (byte-identical; `tools/verify-vendor` proves it, and the `vendor` workflow runs it), with the two headers upstream generates at CMake time written by `tools/update-tinycbor` into the project-owned `src/tinycbor/`. The only R function is `zucbor_info()`. `README.md` is still the template (Stage 8). `src/init.c` registers every `.Call` entry point (`R_useDynamicSymbols(dll, FALSE)`, `R_forceSymbols(dll, TRUE)`), so an unregistered symbol is not callable and R code calls `.Call(zucbor_x)`, never `.Call("zucbor_x")`.
+
+`NEWS.md` keeps a versioned heading: R CMD check NOTEs a bare `# zucbor (development version)` once it is the only heading.
+
+Vendoring checks that must stay green:
+
+```sh
+tools/verify-vendor                         # vendor tree == pinned release; generated headers agree
+R CMD INSTALL -l <lib> . && tools/check-symbols <lib>/zucbor/libs/zucbor.so
+```
+
+Run `tools/check-symbols` on an `R CMD INSTALL` build, not a `load_all()` one: `load_all()` compiles with `-UNDEBUG`, which leaves TinyCBOR's `assert()`s in and makes the check fail, correctly. Under R's normal `-DNDEBUG`, TinyCBOR's `cbor_assert()` becomes `unreachable()`: a violated TinyCBOR precondition is undefined behaviour, not an abort, so check an item's type before calling any `cbor_value_get_*` (design §13, trap 3).
+
+R's own headers need C11 (`R_ext/Complex.h` uses an anonymous struct), so a strict `-std=gnu99 -Wpedantic` build of project files fails inside R, not inside zucbor. Check project files with `-std=gnu17` or later.
 
 No sibling package is a confirmed consumer (roadmap Stage 0 inventory), so v1 is the R API only: no C API, no archive.
 
@@ -50,7 +63,7 @@ Workflows in `.github/workflows/` delegate to reusable workflows in `pedrobtz/r-
 These are how `zujson`/`zuxml` are built; follow them here unless there is a CBOR-specific reason not to.
 
 - **Vendored sources are never edited in place.** They live under `src/vendor/<lib>/`, byte-identical to a pinned upstream release, refreshed by a script in `tools/`. Local configuration goes in a project-owned header outside the vendor tree.
-- **Portable make only** in `src/Makevars`: list object files in `OBJECTS` by hand (R only auto-compiles `src/*.c`, not subdirectories), and no GNU-make features such as `$(wildcard)` or `$(shell)`, which would cost `SystemRequirements: GNU make`. Keep `Makevars.win` in step. Keep `.o`/`.so`/`.dll` out of the build tarball via `.Rbuildignore`.
+- **Portable make only** in `src/Makevars`: list object files in `OBJECTS` by hand (R only auto-compiles `src/*.c`, not subdirectories), and no GNU-make features such as `$(wildcard)` or `$(shell)`, which would cost `SystemRequirements: GNU make`. There is deliberately no `Makevars.win`; Windows falls back to `Makevars`, so there is one list to keep right. Keep `.o`/`.so`/`.dll` out of the build tarball via `.Rbuildignore`.
 - **Naming:** R exports use a format prefix (`json_parse`/`xml_parse` → here presumably `cbor_*`), R and C internals use `zu_`, `.Call` entry points use `zucbor_`.
 - **Errors are classed conditions**, all inheriting a package base class (e.g. `zujson_error`), raised in C where the cause is known. Tests assert on condition class, never message text.
 - **Heap state that must survive a longjmp is owned by R** (finalized external pointers), since `Rf_error()`, `R_CheckUserInterrupt()` and R allocators jump past any `free()`.

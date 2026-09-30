@@ -1,0 +1,30 @@
+Vendored dependency: TinyCBOR
+
+  Upstream:      https://github.com/intel/tinycbor
+  Release tag:   v7.0
+  Commit:        6442e749ca811e24afad1551338a45c75e09808f
+  Version:       7.0
+  Tarball:       https://github.com/intel/tinycbor/archive/refs/tags/v7.0.tar.gz
+  SHA-256:       8b1b76001b9f987677f2ea7aa814fba1f810ff6cbbffa62ea3bac612c55b1a56
+  Imported:      2026-09-30
+  License:       MIT (see src/vendor/tinycbor/LICENSE)
+  Local patches: none
+
+Everything in src/vendor/tinycbor/ is a byte-identical copy of the files
+listed in tools/tinycbor-files.txt. The two headers upstream generates at
+CMake time (tinycbor-version.h, tinycbor-export.h) are written by
+tools/update-tinycbor into the project-owned src/tinycbor/, so this tree
+stays verifiable with tools/verify-vendor.
+
+Only the parser, encoder, validator, diagnostic printer and error strings
+are imported. CBOR-to-JSON, the stdio printer, open_memstream, the
+allocating string helpers, the float helpers, CMake, the tests, the examples
+and the tools are deliberately excluded (.agents/design.md section 13).
+
+Compile configuration: CBOR_EXTERNAL_CFG undefined, CBOR_PARSER_MAX_RECURSIONS
+left at its default (1024), CBOR_API empty. R compiles with -DNDEBUG, under
+which TinyCBOR's cbor_assert() is unreachable() rather than assert().
+
+Hash verification is trust-on-first-use: the SHA-256 above was computed from
+GitHub's archive of the tag at import time and is re-checked by
+tools/verify-vendor. Upstream publishes no signed release asset.

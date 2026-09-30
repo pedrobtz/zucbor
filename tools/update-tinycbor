@@ -1,0 +1,96 @@
+#!/bin/sh
+# Re-vendor TinyCBOR. Usage: tools/update-tinycbor <tag>   e.g. v7.0
+#
+# Replaces src/vendor/tinycbor/ with the files in tools/tinycbor-files.txt,
+# rewrites the two headers upstream generates at CMake time (they live in
+# src/tinycbor/, outside the vendor tree), and rewrites src/vendor/PROVENANCE.
+# A CBOR parser gets security releases, so this must stay a ten-minute job.
+# Run from the package root.
+set -eu
+
+TAG="${1:?usage: tools/update-tinycbor <tag>}"
+VERSION="${TAG#v}"
+REPO="https://github.com/intel/tinycbor"
+URL="${REPO}/archive/refs/tags/${TAG}.tar.gz"
+ROOT=$(pwd)
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+# The tag's commit. An annotated tag lists its peeled commit as <tag>^{}.
+COMMIT=$(git ls-remote --tags "$REPO" "refs/tags/${TAG}" "refs/tags/${TAG}^{}" |
+  sort -k2 | tail -1 | cut -f1)
+[ -n "$COMMIT" ] || { echo "tag ${TAG} not found upstream" >&2; exit 1; }
+
+echo "==> fetching $URL"
+curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused -o "$WORK/tinycbor.tar.gz" "$URL"
+SHA=$(shasum -a 256 "$WORK/tinycbor.tar.gz" | cut -d' ' -f1)
+echo "==> sha256 $SHA"
+tar xzf "$WORK/tinycbor.tar.gz" -C "$WORK"
+SRC="$WORK/tinycbor-${VERSION}"
+
+# Version numbers, as upstream's CMake would substitute them.
+MAJOR=$(echo "$VERSION" | cut -d. -f1)
+MINOR=$(echo "$VERSION" | cut -d. -f2)
+PATCH=$(echo "$VERSION" | cut -s -d. -f3)
+PATCH=${PATCH:-0}
+
+echo "==> replacing src/vendor/tinycbor"
+rm -rf "$ROOT/src/vendor/tinycbor"
+mkdir -p "$ROOT/src/vendor/tinycbor"
+grep -v '^#' "$ROOT/tools/tinycbor-files.txt" | grep -v '^[[:space:]]*$' | while read -r f; do
+  cp "$SRC/$f" "$ROOT/src/vendor/tinycbor/$(basename "$f")"
+done
+
+echo "==> writing src/tinycbor/"
+mkdir -p "$ROOT/src/tinycbor"
+cat > "$ROOT/src/tinycbor/tinycbor-version.h" <<HEOF
+/* Written by tools/update-tinycbor from tag ${TAG}; do not edit.
+ * Upstream generates this from src/tinycbor-version.h.in at CMake time. */
+#define TINYCBOR_VERSION_MAJOR      ${MAJOR}
+#define TINYCBOR_VERSION_MINOR      ${MINOR}
+#define TINYCBOR_VERSION_PATCH      ${PATCH}
+HEOF
+cat > "$ROOT/src/tinycbor/tinycbor-export.h" <<HEOF
+/* Written by tools/update-tinycbor; do not edit.
+ * Upstream generates this from src/tinycbor-export.h.in at CMake time.
+ * CBOR_API is empty: TinyCBOR links statically into zucbor's shared object. */
+#ifndef CBOR_API
+#define CBOR_API
+#endif
+HEOF
+
+echo "==> writing src/vendor/PROVENANCE"
+cat > "$ROOT/src/vendor/PROVENANCE" <<PEOF
+Vendored dependency: TinyCBOR
+
+  Upstream:      ${REPO}
+  Release tag:   ${TAG}
+  Commit:        ${COMMIT}
+  Version:       ${VERSION}
+  Tarball:       ${URL}
+  SHA-256:       ${SHA}
+  Imported:      $(date -u +%Y-%m-%d)
+  License:       MIT (see src/vendor/tinycbor/LICENSE)
+  Local patches: none
+
+Everything in src/vendor/tinycbor/ is a byte-identical copy of the files
+listed in tools/tinycbor-files.txt. The two headers upstream generates at
+CMake time (tinycbor-version.h, tinycbor-export.h) are written by
+tools/update-tinycbor into the project-owned src/tinycbor/, so this tree
+stays verifiable with tools/verify-vendor.
+
+Only the parser, encoder, validator, diagnostic printer and error strings
+are imported. CBOR-to-JSON, the stdio printer, open_memstream, the
+allocating string helpers, the float helpers, CMake, the tests, the examples
+and the tools are deliberately excluded (.agents/design.md section 13).
+
+Compile configuration: CBOR_EXTERNAL_CFG undefined, CBOR_PARSER_MAX_RECURSIONS
+left at its default (1024), CBOR_API empty. R compiles with -DNDEBUG, under
+which TinyCBOR's cbor_assert() is unreachable() rather than assert().
+
+Hash verification is trust-on-first-use: the SHA-256 above was computed from
+GitHub's archive of the tag at import time and is re-checked by
+tools/verify-vendor. Upstream publishes no signed release asset.
+PEOF
+
+echo "==> done. Next: tools/verify-vendor, tools/check-symbols, R CMD check."

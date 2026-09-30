@@ -1,0 +1,15 @@
+# TinyCBOR files vendored into src/vendor/tinycbor/, as paths inside the
+# release tarball. Everything listed is copied byte-for-byte; nothing else is.
+# See .agents/design.md section 13 for why each excluded file is excluded.
+src/cbor.h
+src/cborencoder.c
+src/cborerrorstrings.c
+src/cborparser.c
+src/cborpretty.c
+src/cborvalidation.c
+src/cborinternal_p.h
+src/cborinternalmacros_p.h
+src/compilersupport_p.h
+src/utf8_p.h
+src/memory.h
+LICENSE

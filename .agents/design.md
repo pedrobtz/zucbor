@@ -67,7 +67,7 @@ The package decodes and encodes CBOR. It does not verify signatures, parse CDDL,
 
 What it does **not** give us, so the package must:
 
-- **Limits.** Its only bound is the compile-time recursion cap `CBOR_PARSER_MAX_RECURSIONS` (1024). Depth, size and item limits are ours (§11).
+- **Limits.** Its only bound is the compile-time recursion cap `CBOR_PARSER_MAX_RECURSIONS` (1024, which admits 1023 levels; §11). Depth, size and item limits are ours (§11).
 - **Duplicate-key detection in unsorted maps.** `CborValidateMapKeysAreUnique` compares neighbours, so it detects duplicates only in a map already sorted. Detection is ours (§6.5).
 - **Error positions.** `cbor_value_validate()` takes a `const CborValue *` and returns a status only. Offsets come from our own walk (§10).
 - **Semantic tag conversion**, shortest-float selection and map-key sorting on encode. Its encoder writes what it is told.
@@ -493,12 +493,12 @@ Threat model: **the input is hostile**, and so is anything a peer can influence 
 | Limit | Default | Enforced |
 |---|---|---|
 | `max_size` | 64 MiB | before the check phase; while reading in `cbor_read()` |
-| `max_depth` | 256, at most 1024 | check phase, at each container or tag entry |
+| `max_depth` | 256, at most 1023 | check phase, at each container or tag entry |
 | `max_items` | 1e6 | check phase, per data item, including every string chunk |
 
 **Depth counts containers and tags, not values.** The root array is level 1; a scalar inside it is no level of its own; a tag is one level. The encoder charges depth identically, so `cbor_encode()` cannot emit what `cbor_decode()` at the same `max_depth` refuses — output the package will not read back is the worst bug shape available (`zujson` §9).
 
-**Why 1024 is a hard ceiling.** `cbor_value_validate()` recurses, capped at `CBOR_PARSER_MAX_RECURSIONS` (1024), and the build phase recurses too. Raising either is a C-stack decision, not a user preference. `max_depth` above 1024 is `zucbor_invalid_argument`.
+**Why 1023 is a hard ceiling.** `cbor_value_validate()` recurses, capped by `CBOR_PARSER_MAX_RECURSIONS` (1024), and the build phase recurses too. The validator charges each container or tag a level *before* testing for zero, so the deepest item it accepts is 1023 levels, for arrays and tags alike (measured at Stage 1). Raising the cap is a C-stack decision, not a user preference. `max_depth` above 1023 is `zucbor_invalid_argument`. `ZU_MAX_DEPTH_CAP` is defined as 1023, and `src/zu_tinycbor_check.c` fails the build if it stops being `CBOR_PARSER_MAX_RECURSIONS - 1`.
 
 **Why `max_items` exists when `max_size` bounds the input.** Each item costs one input byte but up to ~56 bytes of R heap as a list element, so 64 MiB of `0x80` (empty arrays) in one array would ask R for several gigabytes. 1e6 items bounds the worst case near 100 MB of R objects. Telemetry batches larger than that raise the limit deliberately.
 
@@ -555,7 +555,7 @@ TinyCBOR 7.0 generates two headers at CMake time. They are **project-owned**, ou
 - `tinycbor-export.h` — `#define CBOR_API` (empty; static linkage into our shared object);
 - `tinycbor-version.h` — `TINYCBOR_VERSION_MAJOR 7`, `MINOR 0`, `PATCH 0`, written by `tools/update-tinycbor` from the tag.
 
-`CBOR_EXTERNAL_CFG` is not defined; `CBOR_PARSER_MAX_RECURSIONS` stays at its default of 1024 (§11). `cbor_malloc` is irrelevant, since nothing that calls it is compiled.
+`CBOR_EXTERNAL_CFG` is not defined; `CBOR_PARSER_MAX_RECURSIONS` stays at its default of 1024, admitting 1023 levels (§11). `cbor_malloc` is irrelevant, since nothing that calls it is compiled.
 
 ### The traps
 
@@ -565,9 +565,9 @@ Named here so CI does not have to discover them:
 2. **C23.** Build with R's default standard on R-devel and R-release, and with `-std=gnu99` on oldrel; a TinyCBOR that compiles in only one mode fails somewhere on CRAN.
 3. **`cbor_assert()` under `NDEBUG`.** R compiles with `-DNDEBUG`, and TinyCBOR 7.0 then defines `cbor_assert(cond)` as `if (!(cond)) unreachable()`. A violated TinyCBOR precondition — calling `cbor_value_get_int64()` on a string, say — is **undefined behaviour, not an abort**. Every TinyCBOR accessor is called only after checking the item's type; the sanitizer jobs build with `-UNDEBUG`, so a violation there aborts visibly instead.
 4. **stdio and abort symbols.** `R CMD check` NOTEs a shared object that references `stdout`, `stderr`, `printf`, `abort` or `exit`. `cborpretty.c` writes through a callback, not stdio, and is safe; `cborpretty_stdio.c` is not vendored. `tools/check-symbols` runs `nm -u` over the built object and fails on any of them, and has been seen to fail on a planted `fprintf(stderr, …)`.
-5. **MinGW formats.** `cborpretty.c` hands `<inttypes.h>` format strings (`PRIu64`) to our printf-style callback, which formats them with `vsnprintf()`. On Windows the macro and the function must agree on MSVC versus C99 conventions; define `-D__USE_MINGW_ANSI_STDIO=1` in `Makevars.win`, as `zuxml` does for Expat.
-6. **Half-float intrinsics.** `cborinternal_p.h` selects F16C / SSE2 intrinsics or `_Float16` by compiler and target. We do not call its half-float helpers, but the header is compiled everywhere; i386-without-SSE2 was fixed only in 7.0 (upstream #302).
-7. **Portable make.** `src/Makevars` and `src/Makevars.win` list every object in `OBJECTS` by hand; no `$(wildcard)`, no `$(shell)`, no `-Wno-*`. `.Rbuildignore` keeps `src/**/*.o`, `*.so` and `*.dll` out of the tarball.
+5. **MinGW formats.** `cborpretty.c` hands `<inttypes.h>` format strings (`PRIu64`) to our printf-style callback, which formats them with `vsnprintf()`. On Windows the macro and the function must agree on MSVC versus C99 conventions; define `-D__USE_MINGW_ANSI_STDIO=1`, as `zuxml` does for Expat. It sits in the one `src/Makevars`, where it is inert off Windows.
+6. **Half-float intrinsics.** `cborinternal_p.h` selects F16C / SSE2 intrinsics or `_Float16` by compiler and target. We do not call its half-float helpers, but the header is compiled everywhere; i386-without-SSE2 was fixed only in 7.0 (upstream #302). Where `_Float16` is used, the compiler emits calls to its runtime's conversion helpers (`__extendhfsf2`, `__truncsfhf2`; seen with Apple Clang 17 at Stage 1), so the shared object depends on the platform's compiler runtime providing them. CI's full matrix is what proves it does.
+7. **Portable make.** `src/Makevars` lists every object in `OBJECTS` by hand; no `$(wildcard)`, no `$(shell)`, no `-Wno-*`. There is no `Makevars.win`: R on Windows falls back to `Makevars`, and one file cannot drift from itself. `.Rbuildignore` keeps `src/**/*.o`, `*.so` and `*.dll` out of the tarball.
 8. **GCC < 11.** 7.0's `compilersupport_p.h` defines `CBOR_FALLTHROUGH` as `[[fallthrough]]` whenever `__has_cpp_attribute(fallthrough)` is true, and GCC before 11 says it is in C mode too but rejects the syntax: a hard compile error. Upstream fixed it on `main` after 7.0 (`__has_c_attribute` for C), unreleased as of 2026-09-30. **No CRAN flavour is affected**: on 2026-09-30 the oldest GCC in CRAN's check flavours is 14.3 (Windows), and clang reports `__has_cpp_attribute(fallthrough)` false in C mode, falling back to `__attribute__((fallthrough))` (checked with Apple Clang 17 under gnu99, gnu17 and gnu2x, where the vendored subset compiles clean with `-Wall`; Apple Clang 14 on `r-oldrel-macos-arm64` is confirmed by Stage 1's CI). Who is affected is a user building from source with an old system GCC: RHEL/Rocky/Alma 8 without a gcc-toolset (GCC 8), Ubuntu 20.04 (GCC 9), Debian 11 (GCC 10). §19, Q7.
 
 ### Updating
@@ -580,7 +580,7 @@ Named here so CI does not have to discover them:
 
 - Project code is portable C99, compiling warning-free under `-Wall -Wextra -Wpedantic`; warnings there are CI failures. Vendored TinyCBOR is not held to that.
 - `src/init.c` registers every entry point; `R_useDynamicSymbols(dll, FALSE)`.
-- Licence MIT, matching TinyCBOR and the family. `Authors@R` lists the copyright holders of vendored code as `cph`, each with a comment naming TinyCBOR: **Intel Corporation**, and **S. Phirsov** (2019 notices in the parser). `inst/COPYRIGHTS` records zucbor's and TinyCBOR's notices separately; `LICENSE.note` records provenance.
+- Licence MIT, matching TinyCBOR and the family. `Authors@R` lists the copyright holders of vendored code as `cph`, with a comment naming TinyCBOR. That is **Intel Corporation** alone: upstream also carries a 2019 S. Phirsov notice, but only in files outside the vendored subset, so that holder is not ours to declare. Re-check at every re-vendoring (`grep Copyright src/vendor/tinycbor/*`). `inst/COPYRIGHTS` records zucbor's and TinyCBOR's notices separately; `LICENSE.note` records provenance.
 - `Language: en-GB`; domain terms in `inst/WORDLIST` via `spelling::update_wordlist()`.
 - `.Rbuildignore` covers `.agents/`, `tools/`, `CLAUDE.md` and design notes.
 - `NEWS.md` carries `# zucbor <version>` before the first check that must be clean.
@@ -601,6 +601,9 @@ src/zu_float.c                width selection, half conversion
 src/zu_bigint.c               decimal <-> magnitude
 src/zu_time.c                 RFC 3339, civil dates
 src/zu_diag.c                 diagnostic-notation callback
+src/zu_config.h               constants shared with TinyCBOR-facing code; no R headers
+src/zu_tinycbor_check.c       build fails if ZU_MAX_DEPTH_CAP != CBOR_PARSER_MAX_RECURSIONS
+src/zu_info.c                 zucbor_info(): version, cap, self-test
 src/tinycbor/                 project-owned generated headers (§13)
 src/vendor/tinycbor/          verbatim subset
 src/vendor/PROVENANCE
@@ -700,10 +703,11 @@ CBOR has no number parsing or escape processing, so being slower than the JSON s
 | 16 | Partial names on encode | error (`zuyaml`), not array (`zujson`) |
 | 17 | `Date` on encode | tag 1004 |
 | 18 | `POSIXct` on encode | tag 1 |
-| 19 | Limit defaults | §11 table; `max_depth` ≤ 1024 |
+| 19 | Limit defaults | §11 table; `max_depth` ≤ 1023 |
 | 20 | Streaming decode | never; whole-buffer only |
 | 21 | Scratch memory | `R_alloc` only; TinyCBOR allocates nothing |
 | 22 | C API | none in v1 |
+| 23 | GCC < 11 (trap 8) | Ship 7.0; the README states GCC ≥ 11 (Stage 8). Revisit when upstream releases the fix |
 
 ---
 
@@ -715,7 +719,7 @@ CBOR has no number parsing or escape processing, so being slower than the JSON s
 4. **Validation offsets.** `cbor_value_validate()` reports no position, so a UTF-8 or tag-content error has `offset = NA`. Validating per item from the walk would recover it at some cost to throughput. Measure first.
 5. **The bignum conversion cap** (128 bytes, §6.6). Revisit if a protocol uses larger integers as numbers rather than as opaque bytes.
 6. **A C API for siblings.** `zucrypt` (COSE signing) or `zuhttp` (`application/cbor`) may want CBOR from C. Design it only once one of them has a concrete need, following `zukomp`'s registered-table pattern (`zujson` §15).
-7. **GCC < 11** (§13, trap 8). A user-install problem, not a CRAN one. Leaning: ship 7.0 and state a GCC ≥ 11 requirement in the README; if upstream has released the fix by Stage 1, pin that release instead. Pinning the fix's commit is ruled out, since it breaks the never-track-`main` rule. Close at roadmap Stage 1.
+7. ~~**GCC < 11**~~ Closed at Stage 1 (2026-09-30): 7.0 is still upstream's newest release, so it ships, and the README states the GCC ≥ 11 requirement. Decision 23.
 
 ---
 

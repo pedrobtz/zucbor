@@ -60,7 +60,7 @@ The package is the `usethis` skeleton; clear it before building on it.
 
 ## Stage 1 — Vendor TinyCBOR and prove it builds · M
 
-**Status:** not started.
+**Status:** complete.
 
 The highest-risk stage. Do not proceed until it is green on Windows and on R-oldrel.
 
@@ -82,6 +82,18 @@ The highest-risk stage. Do not proceed until it is green on Windows and on R-old
 
 **Trap:** if a platform fights the build, fix configuration outside the vendor tree. A local patch to TinyCBOR is the last resort; if one is unavoidable, it lives in `tools/patches/`, is applied by `tools/update-tinycbor`, is named in `PROVENANCE`, and `verify-vendor` checks the patched result.
 
+**What actually happened**
+
+- **7.0 is still upstream's newest release** (re-checked 2026-09-30), so the pin stands and §19 Q7 closed as decision 23: ship 7.0, state GCC ≥ 11 in the README at Stage 8. The import's tarball SHA-256 and tag commit match the ones recorded when the design was written.
+- **Only one copyright holder.** The design named S. Phirsov as a second `cph`, but that notice is only in upstream files outside the vendored subset. `Authors@R` lists Intel Corporation alone, and design §14 now says why. Declaring a holder whose code the package does not contain would have been as false as declaring one too early.
+- **The subset links on its own.** Every `cbor_*` symbol resolves inside the five compiled files, and nothing calls `malloc`, stdio or `abort`. With `_Float16` available, clang emits calls to the compiler runtime's half-float helpers (`__extendhfsf2`, `__truncsfhf2`), which is trap 6 turning up in practice. The full CI matrix is what shows each platform's runtime provides them.
+- **`tools/check-symbols` needed `assert` in its list.** R CMD check reports `__assert_fail` / `__assert_rtn` as it reports `abort`. The check fails on a `load_all()` build, whose `-UNDEBUG` keeps TinyCBOR's `assert()`s, and passes on an `R CMD INSTALL` build under R's `-DNDEBUG`. That split was the first canary. The second was a planted `fprintf(stderr, …)`, caught through `__stderrp`: clang had rewritten the `fprintf` into an `fwrite`, so the symbol that exposed it was the stream, not the function. A symbol check that listed only function names would have passed it.
+- **`tools/verify-vendor` was seen to fail** on a one-byte edit, a stray file, and a version header that disagreed with `PROVENANCE`, each reported separately.
+- **One `Makevars`, no `Makevars.win`.** R on Windows falls back to `Makevars`, so the object list exists once. `__USE_MINGW_ANSI_STDIO` is set there and is inert off Windows.
+- **The depth ceiling is 1023, not 1024.** The design took `CBOR_PARSER_MAX_RECURSIONS` (1024) as the ceiling. Reading `cborvalidation.c` while planning Stage 2 showed the validator charges a level before testing it, and a probe confirmed it: 1023 nested arrays, or 1023 nested tags, validate, and 1024 fail with `CborErrorNestingTooDeep`. `ZU_MAX_DEPTH_CAP` is 1023, `zucbor_info()` reports it, and design §11 says why. The macro lives in TinyCBOR's internal header, so `src/zu_tinycbor_check.c` includes the internals, with no R headers, and `#error`s unless the cap is `CBOR_PARSER_MAX_RECURSIONS - 1`. Caught before merging, so no released number ever said 1024.
+- **R's headers need C11.** Project files compile clean under `-Wall -Wextra -Wpedantic -Werror` as gnu17 and gnu2x. As gnu99 the build fails inside R's `R_ext/Complex.h` (an anonymous struct), not in zucbor.
+- The `vendor` workflow runs `tools/verify-vendor` and the r-actions PR guard, plus a `symbols` job running `tools/check-symbols` on an `R CMD INSTALL` build.
+
 ---
 
 ## Stage 2 — Check phase: walk, validation, limits, conditions · L
@@ -92,7 +104,7 @@ The core. Everything after it relies on what this stage guarantees.
 
 **Do**
 - `src/zu_cond.c`: `zu_stop()` building classed conditions in C, the status-name table, the §10 hierarchy. `R/conditions.R` for R-side argument errors of the same shape. `?"zucbor-conditions"`.
-- Argument validation for the three limits (§11): positive whole numbers, `Inf` where allowed, `max_depth` ≤ 1024.
+- Argument validation for the three limits (§11): positive whole numbers, `Inf` where allowed, `max_depth` ≤ 1023.
 - `src/zu_walk.c`: the iterative walk over a TinyCBOR iterator — explicit container stack in `R_alloc` scratch, depth including tags, `max_items` counting string chunks, byte offsets, trailing-byte check, `R_CheckUserInterrupt()` every 65,536 items.
 - Duplicate keys by value (§6.5): per-map key descriptors, sorted, adjacent comparison. Every comparison class, including `1` against `0x1801`.
 - `ZU_VALIDATE_FLAGS` and `cbor_value_validate()`; `deterministic = TRUE` adding `CborValidateCanonicalFormat` and the bignum-fits-an-integer rule.

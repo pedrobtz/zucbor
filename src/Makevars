@@ -1,0 +1,27 @@
+# Portable make only: every object is listed by hand, since R compiles only
+# src/*.c on its own and $(wildcard) would cost SystemRequirements: GNU make.
+# No -W overrides either; CRAN rejects them. There is no Makevars.win: R on
+# Windows uses this file when that one is absent, which keeps the two from
+# drifting. See .agents/design.md section 13.
+#
+# -Itinycbor resolves cbor.h's #include "tinycbor-export.h" and
+# "tinycbor-version.h" to the project-owned headers that tools/update-tinycbor
+# writes, since the vendor tree holds only upstream's files.
+#
+# __USE_MINGW_ANSI_STDIO=1 makes Rtools' <inttypes.h> format macros and its
+# vsnprintf agree on C99 conventions, which cborpretty.c's PRIu64 formats
+# depend on (design section 13, trap 5). Inert off Windows.
+PKG_CPPFLAGS = -Itinycbor -Ivendor/tinycbor -D__USE_MINGW_ANSI_STDIO=1
+
+TINYCBOR_OBJECTS = \
+	vendor/tinycbor/cborencoder.o \
+	vendor/tinycbor/cborerrorstrings.o \
+	vendor/tinycbor/cborparser.o \
+	vendor/tinycbor/cborpretty.o \
+	vendor/tinycbor/cborvalidation.o
+
+OBJECTS = \
+	init.o \
+	zu_info.o \
+	zu_tinycbor_check.o \
+	$(TINYCBOR_OBJECTS)

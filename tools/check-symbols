@@ -1,0 +1,26 @@
+#!/bin/sh
+# Fail if the built shared object references symbols R CMD check objects to:
+# output to the console (stdout, stderr, printf, puts, putchar) or ending the
+# process (abort, exit, _exit, and assert(), which reaches them). Design
+# section 13, trap 4. Run it on an R CMD INSTALL build: devtools::load_all()
+# compiles with -UNDEBUG, which leaves TinyCBOR's assert()s in.
+#
+# Usage: tools/check-symbols [path/to/zucbor.so]   (default: src/zucbor.so)
+# Build first, e.g. with R CMD INSTALL or devtools::load_all(). Uses nm -u,
+# so it sees what the object needs from outside, not what it defines.
+set -eu
+
+SO="${1:-src/zucbor.so}"
+[ -f "$SO" ] || { echo "no shared object at $SO; build the package first" >&2; exit 2; }
+
+# Leading underscores differ by platform (_printf on macOS), and __stdoutp /
+# __stderrp are macOS's names for stdout / stderr.
+BAD='^_*(stdout|stderr|stdoutp|stderrp|printf|vprintf|puts|putchar|fputs|fprintf|vfprintf|abort|exit|_exit|_Exit|assert|assert_fail|assert_rtn)$'
+
+found=$(nm -u "$SO" | awk '{print $NF}' | grep -E "$BAD" || true)
+if [ -n "$found" ]; then
+  echo "FAIL: $SO references symbols R CMD check reports:" >&2
+  echo "$found" | sed 's/^/  /' >&2
+  exit 1
+fi
+echo "==> $SO: no console-output or process-exit symbols"

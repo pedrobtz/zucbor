@@ -1,0 +1,28 @@
+zucbor
+======
+
+Copyright (c) 2026 Pedro Baltazar
+
+Licensed under the MIT License; see the LICENSE file in the package root.
+This covers everything in the package except the bundled TinyCBOR sources
+below.
+
+
+TinyCBOR (src/vendor/tinycbor)
+==============================
+
+Copyright (c) 2017 Intel Corporation
+
+The individual source files carry Intel Corporation notices dated 2016,
+2017, 2021 and 2025. TinyCBOR is licensed under the MIT License; its full
+text is in src/vendor/tinycbor/LICENSE, which is an unmodified copy of
+upstream's LICENSE file.
+
+Upstream:  https://github.com/intel/tinycbor
+Version:   7.0 (tag v7.0)
+Details:   src/vendor/PROVENANCE
+
+The files src/tinycbor/tinycbor-version.h and src/tinycbor/tinycbor-export.h
+are written by zucbor's tools/update-tinycbor to stand in for the headers
+TinyCBOR's CMake build generates from its templates; they are part of
+zucbor.

@@ -1,0 +1,83 @@
+#!/bin/sh
+# Verify src/vendor/tinycbor matches the pinned upstream release exactly, and
+# that the project-owned generated headers agree with it. Exits non-zero on
+# any difference. Run from the package root.
+set -eu
+
+PROV="src/vendor/PROVENANCE"
+[ -f "$PROV" ] || { echo "missing $PROV" >&2; exit 1; }
+
+VERSION=$(awk '/^  Version:/ {print $2}' "$PROV")
+EXPECTED=$(awk '/^  SHA-256:/ {print $2}' "$PROV")
+URL=$(awk '/^  Tarball:/ {print $2}' "$PROV")
+
+echo "==> pinned TinyCBOR $VERSION"
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+FAILURES="$WORK/failures"
+: > "$FAILURES"
+
+# --retry, because this runs on every push in CI; integrity rests on the
+# SHA-256 comparison below, not on the transport.
+curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused -o "$WORK/tinycbor.tar.gz" "$URL"
+ACTUAL=$(shasum -a 256 "$WORK/tinycbor.tar.gz" | cut -d' ' -f1)
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+  echo "FAIL: tarball sha256 mismatch" >&2
+  echo "  expected $EXPECTED" >&2
+  echo "  actual   $ACTUAL" >&2
+  exit 1
+fi
+echo "==> sha256 matches"
+
+tar xzf "$WORK/tinycbor.tar.gz" -C "$WORK"
+SRC="$WORK/tinycbor-${VERSION}"
+
+grep -v '^#' tools/tinycbor-files.txt | grep -v '^[[:space:]]*$' > "$WORK/paths"
+while read -r f; do basename "$f"; done < "$WORK/paths" | sort > "$WORK/manifest"
+
+# 1. Every manifest file is present and byte-identical.
+count=0
+while read -r f; do
+  b=$(basename "$f")
+  if [ ! -f "src/vendor/tinycbor/$b" ]; then
+    echo "FAIL: src/vendor/tinycbor/$b is missing" >> "$FAILURES"
+  elif ! cmp -s "$SRC/$f" "src/vendor/tinycbor/$b"; then
+    echo "FAIL: src/vendor/tinycbor/$b differs from upstream $f" >> "$FAILURES"
+  fi
+  count=$((count + 1))
+done < "$WORK/paths"
+
+# 2. Nothing is present that the manifest does not list. Build artifacts are
+#    ignored: R builds in place, and they are git-ignored.
+for local in src/vendor/tinycbor/*; do
+  b=$(basename "$local")
+  case "$b" in *.o | *.so | *.dll | *.dylib | *.a) continue ;; esac
+  grep -qx "$b" "$WORK/manifest" ||
+    echo "FAIL: src/vendor/tinycbor/$b is not in tools/tinycbor-files.txt" >> "$FAILURES"
+done
+
+# 3. Generated headers never live in the vendor tree, and the project-owned
+#    ones carry the pinned version.
+for h in tinycbor-version.h tinycbor-export.h; do
+  [ ! -f "src/vendor/tinycbor/$h" ] ||
+    echo "FAIL: generated header $h leaked into the vendor tree" >> "$FAILURES"
+  [ -f "src/tinycbor/$h" ] || echo "FAIL: src/tinycbor/$h is missing" >> "$FAILURES"
+done
+MAJOR=$(echo "$VERSION" | cut -d. -f1)
+MINOR=$(echo "$VERSION" | cut -d. -f2)
+PATCH=$(echo "$VERSION" | cut -s -d. -f3)
+PATCH=${PATCH:-0}
+HDR="src/tinycbor/tinycbor-version.h"
+for pair in "MAJOR $MAJOR" "MINOR $MINOR" "PATCH $PATCH"; do
+  set -- $pair
+  got=$(awk -v k="TINYCBOR_VERSION_$1" '$1 == "#define" && $2 == k {print $3}' "$HDR")
+  [ "$got" = "$2" ] ||
+    echo "FAIL: $HDR has TINYCBOR_VERSION_$1 '$got', PROVENANCE says '$2'" >> "$FAILURES"
+done
+
+if [ -s "$FAILURES" ]; then
+  cat "$FAILURES" >&2
+  echo "==> vendor tree FAILED verification" >&2
+  exit 1
+fi
+echo "==> vendor tree verified clean ($count files, TinyCBOR $VERSION)"

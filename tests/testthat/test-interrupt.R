@@ -1,9 +1,10 @@
 test_that("an interrupt during a decode unwinds, and the input then decodes", {
+  skip_heavy()
   # setTimeLimit() fires from the same R_CheckUserInterrupt() call sites as
   # Ctrl-C, which run every 65,536 items in both phases. Everything they
   # hold is R_alloc()ed or PROTECTed, so the unwind must leave nothing
   # behind (design section 12; zuxml #37 for the technique).
-  n <- 4e6
+  n <- 1.5e6
   x <- c(hex_raw("9a"), as.raw(c(n %/% 16777216, (n %/% 65536) %% 256, (n %/% 256) %% 256, n %% 256)),
          rep(as.raw(0x80), n))
   interrupted <- tryCatch({

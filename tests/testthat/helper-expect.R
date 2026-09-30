@@ -28,3 +28,10 @@ utc <- function(secs) structure(secs, class = c("POSIXct", "POSIXt"), tzone = "U
 # exact.
 f64 <- function(hex) readBin(hex_raw(hex), "double", size = 8L, endian = "big")
 f32 <- function(hex) readBin(hex_raw(hex), "double", size = 4L, endian = "big")
+
+# Skips a test that allocates millions of R objects. It checks a limit or a
+# code path, not memory safety, and under gctorture it would take hours;
+# native-checks.yaml sets ZUCBOR_SKIP_HEAVY for the gctorture job.
+skip_heavy <- function() {
+  skip_if(nzchar(Sys.getenv("ZUCBOR_SKIP_HEAVY")), "ZUCBOR_SKIP_HEAVY is set")
+}

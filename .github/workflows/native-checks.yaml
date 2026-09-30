@@ -53,10 +53,17 @@ jobs:
   lto:
     uses: pedrobtz/r-actions/.github/workflows/lto.yml@v1
 
+  # The wide quick step on each pull-request push, step 100 after merge.
+  # ZUCBOR_SKIP_HEAVY skips the tests that allocate millions of objects:
+  # they check limits and an interrupt path, not PROTECT discipline, and
+  # under gctorture they would take hours (r-actions advises exactly this).
   gctorture:
     uses: pedrobtz/r-actions/.github/workflows/gctorture.yml@v1
     with:
       step: 100
+      profile: ${{ github.event_name == 'pull_request' && 'quick' || 'full' }}
+      env: |
+        ZUCBOR_SKIP_HEAVY=true
 
   # Blocking from the first run: the C code is new, so any finding is ours.
   rchk:

@@ -261,6 +261,7 @@ test_that("the depth limit holds for the build as well as the check", {
 })
 
 test_that("a large flat array builds from the checked count", {
+  skip_heavy()
   n <- 200000L
   x <- c(hex_raw("9a"), as.raw(c(n %/% 16777216L, (n %/% 65536L) %% 256L, (n %/% 256L) %% 256L, n %% 256L)),
          rep(as.raw(0x01), n))

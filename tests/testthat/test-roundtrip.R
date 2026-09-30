@@ -55,12 +55,12 @@ test_that("every encoding is deterministic and repeatable", {
                list(gen(depth + 1), gen(depth + 1)))
     )
   }
-  for (i in 1:300) {
+  ok <- vapply(1:300, function(i) {
     v <- gen(0)
     a <- cbor_encode(v)
-    expect_identical(cbor_encode(v), a)
-    expect_true(cbor_validate(a, deterministic = TRUE))
-    # decode -> encode is a fixed point.
-    expect_identical(cbor_encode(cbor_decode(a)), a)
-  }
+    identical(cbor_encode(v), a) &&                  # repeatable
+      cbor_validate(a, deterministic = TRUE) &&      # deterministic
+      identical(cbor_encode(cbor_decode(a)), a)      # decode -> encode is a fixed point
+  }, NA)
+  expect_true(all(ok), info = paste(which(!ok), collapse = " "))
 })

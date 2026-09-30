@@ -230,7 +230,8 @@ test_that("cbor_decode() wants exactly one item; cbor_decode_seq() any number", 
 
 test_that("decoding refuses what validation refuses, with the same class", {
   f <- unlist(rfc8949_not_well_formed(), use.names = FALSE)
-  for (h in f) expect_error(cbor_decode(hex_raw(h)), class = "zucbor_parse_error", info = h)
+  expect_identical(unname(fault_class(lapply(f, hex_raw), cbor_decode)),
+                   rep("zucbor_parse_error", length(f)))
   expect_error(cbor_decode(hex_raw("a2 01 00 01 00")), class = "zucbor_duplicate_key")
   expect_error(cbor_decode(hex_raw("61 ff")), class = "zucbor_invalid_error")
   expect_error(cbor_decode(nested(10), max_depth = 5), class = "zucbor_depth_limit")

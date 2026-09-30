@@ -70,3 +70,21 @@ jobs:
     uses: pedrobtz/r-actions/.github/workflows/rchk.yml@v1
     with:
       fail-on-findings: true
+
+  # Third-party conformance (roadmap Stage 6): the committed fixtures must
+  # equal a fresh regeneration from their pinned sources, and cbor/test-
+  # vectors must show no difference its baselines do not explain. Needs the
+  # network, so it lives here and never in the test suite.
+  conformance:
+    runs-on: ubuntu-latest
+    name: conformance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install
+        run: |
+          Rscript -e 'install.packages("jsonlite")'
+          R CMD INSTALL .
+      - run: tools/run-conformance

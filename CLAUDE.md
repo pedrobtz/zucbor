@@ -15,7 +15,9 @@ Intended properties that should shape every design decision:
 
 ## Current state
 
-The repository is a bare usethis skeleton: `DESCRIPTION` still has placeholder Title/Description/Authors, `README.md` is the template, `tests/testthat/test-zucbor.R` is the template test, there is no R API, and TinyCBOR is not vendored yet. `src/init.c` registers the DLL with an empty `.Call` table; each new entry point goes in that table (`@useDynLib zucbor, .registration = TRUE` with `R_useDynamicSymbols(dll, FALSE)`, so an unregistered symbol is not callable).
+The plan is written: [.agents/design.md](.agents/design.md) is the specification (numbered §1–§20: the R mapping in §6–§7, deterministic encoding §8, errors §10, limits §11, TinyCBOR vendoring and its build traps §13, open questions §19) and [.agents/roadmap.md](.agents/roadmap.md) sequences it into Stages 0–9, each with a **Status:** line. Progress is tracked in the `v0.1.0` milestone: umbrella issue #4, with one `stage` sub-issue per stage (#5 for Stage 0 through #14 for Stage 9), each linking to its heading anchor. Never put status in a stage heading, since that changes the anchor. Read both before starting work; a decision in design §18 is settled unless the work shows it is wrong, and then the design changes in the same commit.
+
+The code is a bare usethis skeleton: `DESCRIPTION` still has placeholder Title/Description/Authors, `README.md` is the template, `tests/testthat/test-zucbor.R` is the template test, there is no R API, and TinyCBOR is not vendored yet. `src/init.c` registers the DLL with an empty `.Call` table; each new entry point goes in that table (`@useDynLib zucbor, .registration = TRUE` with `R_useDynamicSymbols(dll, FALSE)`, so an unregistered symbol is not callable).
 
 `NEWS.md` still has the usethis heading `# zucbor (development version)`. The siblings learned that R CMD check wants `# zucbor <version>` once that is the only heading, or it emits a NEWS NOTE.
 
@@ -52,4 +54,4 @@ These are how `zujson`/`zuxml` are built; follow them here unless there is a CBO
 - **Heap state that must survive a longjmp is owned by R** (finalized external pointers), since `Rf_error()`, `R_CheckUserInterrupt()` and R allocators jump past any `free()`.
 - **Tests are self-sufficient** (inputs built inside each `test_that()`), pass under `shuffle = TRUE`, stay serial (no `Config/testthat/parallel`, so gctorture/valgrind CI legs actually exercise the C code), and keep the suite to a few seconds for CRAN.
 - **Prose is en-GB** (`Language: en-GB` in DESCRIPTION in the siblings), with domain terms in `inst/WORDLIST` via `spelling::update_wordlist()`.
-- Design documents for the siblings live in `.agents/`; if one is written for zucbor, keep it there and keep its mapping tables in sync with the roxygen docs and the tests.
+- Design documents live in `.agents/`. Keep design.md's mapping tables in sync with the roxygen docs and the tests: they are the same table three times.

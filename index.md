@@ -109,6 +109,9 @@ packages.
   limits, duplicate keys and deterministic input.
 - [`vignette("cose-webauthn", package = "zucbor")`](https://pedrobtz.github.io/zucbor/articles/cose-webauthn.md):
   WebAuthn attestation objects, COSE keys and signed structures.
+- [Examples](https://pedrobtz.github.io/zucbor/articles/examples.html):
+  worked examples for COSE keys, wide integers, dates, embedded CBOR,
+  telemetry, files and limits.
 - [`?cbor_decode`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
   and
   [`?cbor_encode`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)

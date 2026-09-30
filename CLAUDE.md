@@ -44,15 +44,19 @@ since that changes the anchor. Read both before starting work; a
 decision in design §18 is settled unless the work shows it is wrong, and
 then the design changes in the same commit.
 
-Stages 0–4 are done. TinyCBOR 7.0 is vendored in `src/vendor/tinycbor/`
-(byte-identical; `tools/verify-vendor` proves it, and the `vendor`
-workflow runs it), with the two headers upstream generates at CMake time
-written by `tools/update-tinycbor` into the project-owned
+Stages 0–6 are done. TinyCBOR 7.0’s parser, validator and error strings
+are vendored in `src/vendor/tinycbor/` (the encoder and printer are
+project code) (byte-identical; `tools/verify-vendor` proves it, and the
+`vendor` workflow runs it), with the two headers upstream generates at
+CMake time written by `tools/update-tinycbor` into the project-owned
 `src/tinycbor/`. The R API so far is
 [`zucbor_info()`](https://pedrobtz.github.io/zucbor/reference/zucbor_info.md),
 [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)/[`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
 (project code in `src/zu_encode.c`, not TinyCBOR’s encoder: design §8),
 [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)/[`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md),
+[`cbor_diagnose()`](https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.md)
+(project printer in `src/zu_diag.c`, matching RFC 8949 Appendix A:
+design §5),
 [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)/[`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md),
 the value classes
 ([`cbor_map()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md),
@@ -72,8 +76,17 @@ runs only after the check, takes container sizes from the check’s plan
 (never from length headers), and raises its own faults through
 `zu_raise_fault()` via `R_FindNamespace`, with the user’s call wrapped
 in [`quote()`](https://rdrr.io/r/base/substitute.html); `zu_mkchar()`
-there is the only place CBOR text becomes a CHARSXP. Three decoder rules
-exist to make `cbor_encode(cbor_decode(b))` equal `b` and are pinned by
+there is the only place CBOR text becomes a CHARSXP. Third-party
+conformance data lives in `tests/testthat/fixtures/` (QCBOR’s
+not-well-formed vectors, all of `cose-wg/Examples`, RFC 8392/8428 and
+WebAuthn L3 vectors): regenerate it only with `tools/update-fixtures`,
+never by hand; `tools/run-conformance` checks the fixtures against their
+sources and runs `cbor/test-vectors` against rule-attributed baselines.
+Tests that allocate millions of objects call `skip_heavy()`, which the
+gctorture job triggers through `ZUCBOR_SKIP_HEAVY`; checking many inputs
+goes through `fault_class()` and one expectation, since per-expectation
+overhead dominates run time. Three decoder rules exist to make
+`cbor_encode(cbor_decode(b))` equal `b` and are pinned by
 `test-roundtrip.R`: a one-element array decodes as an
 [`I()`](https://rdrr.io/r/base/AsIs.html) value, booleans do not join
 the numbers, and whole doubles encode as integers. Float literals in

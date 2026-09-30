@@ -47,6 +47,8 @@
 <li>
 <code><a href="../reference/cbor_encode.html">cbor_encode()</a></code> and <code><a href="../reference/cbor_encode.html">cbor_encode_seq()</a></code> write R values as CBOR in RFC 8949 core deterministic encoding: identical R objects give identical bytes on every platform. Whole doubles are written as integers, so a COSE algorithm identifier written as <code>-7</code> stays an integer.</li>
 <li>Decoding marks a one-element array with <code><a href="https://rdrr.io/r/base/AsIs.html" class="external-link">I()</a></code> and keeps booleans apart from numbers, so that decoding and re-encoding gives back the same bytes.</li>
+<li>
+<code><a href="../reference/cbor_diagnose.html">cbor_diagnose()</a></code> shows CBOR in RFC 8949 diagnostic notation, as the RFC’s own examples write it, after the same check as <code><a href="../reference/cbor_validate.html">cbor_validate()</a></code>.</li>
 </ul></div>
   </main></div>
 

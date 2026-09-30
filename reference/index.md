@@ -10,6 +10,8 @@
 - [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
   [`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
   : Decode CBOR
+- [`cbor_diagnose()`](https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.md)
+  : CBOR diagnostic notation
 - [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
   [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
   : Encode R values as CBOR

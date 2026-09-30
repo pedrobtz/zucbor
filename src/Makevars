@@ -22,6 +22,9 @@ TINYCBOR_OBJECTS = \
 
 OBJECTS = \
 	init.o \
+	zu_cond.o \
+	zu_float.o \
 	zu_info.o \
+	zu_walk.o \
 	zu_tinycbor_check.o \
 	$(TINYCBOR_OBJECTS)

@@ -3,7 +3,9 @@
 #include "zucbor.h"
 
 static const R_CallMethodDef CallEntries[] = {
-    {"zucbor_build_info", (DL_FUNC) &zucbor_build_info, 0},
+    {"zucbor_build_info",   (DL_FUNC) &zucbor_build_info,   0},
+    {"zucbor_status_names", (DL_FUNC) &zucbor_status_names, 0},
+    {"zucbor_check",        (DL_FUNC) &zucbor_check,        6},
     {NULL, NULL, 0}
 };
 

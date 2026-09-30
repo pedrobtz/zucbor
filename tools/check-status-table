@@ -1,0 +1,29 @@
+#!/bin/sh
+# Fail if the vendored cbor.h has a CborError enumerator that src/zu_cond.c's
+# status table lacks, or the table names one cbor.h does not have. R maps
+# faults to condition classes by these names, so a new upstream enumerator
+# must be added on purpose, not fall through (design section 10).
+# Run from the package root.
+set -eu
+
+HDR="src/vendor/tinycbor/cbor.h"
+TABLE="src/zu_cond.c"
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+sed -n '/^typedef enum CborError/,/} CborError;/p' "$HDR" |
+  grep -oE '^[[:space:]]*Cbor[A-Za-z0-9]+' | sed -E 's/^[[:space:]]+//' |
+  sort -u > "$WORK/header"
+grep -oE 'ZU_STATUS\(Cbor[A-Za-z0-9]+\)' "$TABLE" |
+  sed -e 's/ZU_STATUS(//' -e 's/)//' | sort -u > "$WORK/table"
+
+[ -s "$WORK/header" ] || { echo "FAIL: found no CborError enumerators in $HDR" >&2; exit 1; }
+
+missing=$(comm -23 "$WORK/header" "$WORK/table")
+extra=$(comm -13 "$WORK/header" "$WORK/table")
+if [ -n "$missing$extra" ]; then
+  [ -z "$missing" ] || { echo "FAIL: in $HDR but not in $TABLE:" >&2; echo "$missing" | sed 's/^/  /' >&2; }
+  [ -z "$extra" ] || { echo "FAIL: in $TABLE but not in $HDR:" >&2; echo "$extra" | sed 's/^/  /' >&2; }
+  exit 1
+fi
+echo "==> status table matches cbor.h ($(wc -l < "$WORK/header" | tr -d ' ') enumerators)"

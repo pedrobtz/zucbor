@@ -1,13 +1,74 @@
 #ifndef ZUCBOR_H
 #define ZUCBOR_H
 
+#include <stddef.h>
+#include <stdint.h>
+
 #define R_NO_REMAP
 #include <R.h>
 #include <Rinternals.h>
 
 #include "zu_config.h"
 
-/* .Call entry points, registered in init.c. */
+/* ---- check phase (zu_walk.c), design sections 4 and 11 -------------------
+ * Nothing here allocates an R object: scratch is R_alloc()ed, which R frees
+ * when the .Call returns or unwinds (design section 12). */
+
+typedef struct {
+    int max_depth;          /* 1 .. ZU_MAX_DEPTH_CAP */
+    uint64_t max_items;     /* UINT64_MAX for Inf */
+    int duplicate_keys;     /* nonzero: accept them */
+    int deterministic;      /* nonzero: RFC 8949 section 4.2.1 input only */
+    int sequence;           /* nonzero: zero or more items (RFC 8742) */
+} zu_check_opts;
+
+/* Why a check failed. status is an enumerator name (a CborError, or one of
+ * zucbor's ZU_ERR_* below); R maps it to a condition class by name. */
+typedef struct {
+    const char *status;     /* NULL: no fault */
+    const char *detail;     /* TinyCBOR's wording, or NULL */
+    double offset;          /* 0-based byte offset, NA_REAL when unknown */
+    const char *limit;      /* the limit argument's name, or NULL */
+    double limit_value;
+} zu_fault;
+
+/* What the build phase needs from the check phase: the element count of
+ * every container, in the order the walk met them (preorder). Maps count
+ * pairs. Indefinite-length containers are why this exists; for the rest it
+ * saves re-reading a header the check has already proved. */
+typedef struct {
+    size_t *counts;
+    size_t n, cap;
+    size_t n_items;         /* top-level items found */
+} zu_plan;
+
+/* Runs the whole check phase over buf. Returns 0 and fills plan (which may
+ * be NULL), or returns 1 and fills fault. Never raises. */
+int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
+             zu_plan *plan, zu_fault *fault);
+
+/* zucbor's own statuses, alongside TinyCBOR's CborError names. */
+#define ZU_ERR_DEPTH_LIMIT          "ZU_ERR_DEPTH_LIMIT"
+#define ZU_ERR_ITEM_LIMIT           "ZU_ERR_ITEM_LIMIT"
+#define ZU_ERR_DUPLICATE_KEY        "ZU_ERR_DUPLICATE_KEY"
+#define ZU_ERR_BIGNUM_NOT_PREFERRED "ZU_ERR_BIGNUM_NOT_PREFERRED"
+#define ZU_ERR_ODD_MAP              "ZU_ERR_ODD_MAP"
+
+/* ---- zu_cond.c ------------------------------------------------------------ */
+
+/* The enumerator name of a CborError, or NULL for a value no enumerator has. */
+const char *zu_cbor_status_name(int err);
+SEXP zu_fault_sexp(const zu_fault *fault);
+
+/* ---- zu_float.c ----------------------------------------------------------- */
+
+double zu_half_to_double(uint16_t half);
+
+/* ---- .Call entry points, registered in init.c ----------------------------- */
+
 SEXP zucbor_build_info(void);
+SEXP zucbor_status_names(void);
+SEXP zucbor_check(SEXP x, SEXP sequence, SEXP deterministic,
+                  SEXP duplicate_keys, SEXP max_depth, SEXP max_items);
 
 #endif

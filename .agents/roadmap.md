@@ -98,7 +98,7 @@ The highest-risk stage. Do not proceed until it is green on Windows and on R-old
 
 ## Stage 2 — Check phase: walk, validation, limits, conditions · L
 
-**Status:** not started.
+**Status:** complete.
 
 The core. Everything after it relies on what this stage guarantees.
 
@@ -118,6 +118,19 @@ The core. Everything after it relies on what this stage guarantees.
 - The 2^64-element header, 100,000 nested arrays and 100,000 nested tags each fail with their own class, no crash, no stack overflow — the deep cases also under a 1 MB stack (`ulimit -s`) in the sanitizer job.
 - Each limit trips its own class with `limit` and `limit_value` set; a test enumerates every `CborError` in the vendored `cbor.h` and asserts it maps to a class or to a deliberate bare `zucbor_error`.
 - ASan + UBSan (with `-UNDEBUG`, trap 3) clean over the suite.
+
+**What actually happened**
+
+- **TinyCBOR's tag-content table is wrong for tag 1.** `CborValidateTagUse` allows only an integer under tag 1, so Appendix A's `1(1363896240.5)`, an epoch time as a float that RFC 8949 §3.4.2 explicitly allows, failed validation. The same table also refuses most content under tags 21–23, which may wrap any item. Tag content is now checked by the walk, against the table in design §11: TinyCBOR's, corrected, plus 100 and 1004. That turned out better than the plan in one respect: these faults now carry the tag's offset, which the validator could never give. The Appendix A test found this, and upstream has not been told yet.
+- **UBSan found a bug on its first run.** `check_duplicates()` formed `w->keys + base` before testing whether there were two keys to compare, and for a map with no keys `w->keys` is still NULL. `NULL + 0` is undefined in C. It was harmless on every real compiler, and exactly what the sanitizer job exists for. It was found by a local UBSan build with TinyCBOR's assertions live (`-UNDEBUG`), before CI ran.
+- **The depth ceiling, measured.** The ceiling Stage 1 corrected to 1023 holds from R: `max_depth = 1023` accepts 1023 nested arrays or tags, the next level is `zucbor_depth_limit`, and `max_depth = 1024` is `zucbor_invalid_argument`. 100,000 nested arrays, tags or indefinite arrays stop at the default limit.
+- **Length headers are guarded twice.** TinyCBOR refuses container lengths of 2^32 and over as `CborErrorDataTooLarge`, which reads like a limit rather than a truncation. The walk checks every definite length against the bytes left first (each element costs at least one), so a nine-byte `9b ff…ff` is a `zucbor_parse_error` at offset 0 and never reaches TinyCBOR's size arithmetic.
+- **TinyCBOR 7.0's chunk API differs from its own documentation.** The doc comment says the chunk getter returns a NULL pointer at the end. In 7.0 it returns `CborErrorNoMoreStringChunks`, and iteration must be bracketed by `cbor_value_begin_string_iteration()` / `…_finish_…()`. Following the doc would have walked off a definite string into the next item.
+- **`cbor_validate(error = TRUE)`** was added. The tests needed the classed condition without building a value, and so will users; design §5 records it.
+- **Appendix A test vectors carry one RFC 7049 leftover.** `cbor/test-vectors` still lists `f818` (`simple(24)`) as valid, which RFC 8949 erratum 5917 made not well-formed. The embedded vectors drop it from Appendix A and test it as a must-reject case.
+- **Duplicate detection sorts.** It is a merge sort per map, not `qsort()`, whose worst case on an attacker-chosen key order is not guaranteed. A 20,000-key map validates in well under a second.
+- **`shuffle = TRUE` reorders a file's top-level definitions, not only its tests.** Small helpers defined at the top of three test files were intermittently undefined, and only the shuffled runs showed it. Shared helpers now live in `tests/testthat/helper-expect.R`.
+- `tools/check-status-table` keeps `zu_cond.c`'s `CborError` table equal to the vendored `cbor.h`. It was seen to fail with one name removed, and it runs in the `vendor` workflow. `native-checks.yaml` arrives here rather than at Stage 7: UBSan over the suite, the ASan containers over `tools/sanitizer-exercise.R`, valgrind, LTO, gctorture and a blocking `rchk`.
 
 ---
 

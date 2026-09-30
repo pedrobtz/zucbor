@@ -38,3 +38,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/lib"
           R CMD INSTALL --no-test-load -l "$RUNNER_TEMP/lib" .
           tools/check-symbols "$RUNNER_TEMP/lib/zucbor/libs/zucbor.so"
+
+  # R maps a fault to a condition class by its CborError enumerator's name.
+  # A TinyCBOR update that adds an enumerator must add it to src/zu_cond.c's
+  # table on purpose (design section 10).
+  status-table:
+    runs-on: ubuntu-latest
+    name: status table matches cbor.h
+    steps:
+      - uses: actions/checkout@v4
+      - run: tools/check-status-table

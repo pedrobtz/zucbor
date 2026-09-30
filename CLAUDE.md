@@ -1,0 +1,108 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working
+with code in this repository.
+
+## What this is
+
+`zucbor` is an R package that encodes and decodes CBOR (RFC 8949) to and
+from ordinary R vectors and lists, using a **vendored copy of the
+TinyCBOR C library** so no system library is required. CBOR is JSON’s
+binary counterpart — maps, arrays, strings, numbers, booleans, null —
+plus native byte strings, exact 64-bit integers, and semantic tags
+(dates, bignums, UUIDs).
+
+Intended properties that should shape every design decision:
+
+- **Decoding** accepts raw vectors, files and connections; **validates
+  structure before building any R object**; and enforces configurable
+  depth and size limits, because the input is expected to be untrusted
+  (network, IoT devices).
+- **Encoding is deterministic**: identical R objects produce identical
+  bytes.
+- Target uses: COSE and WebAuthn passkey data, CWT tokens, CoAP device
+  telemetry, and other IETF protocols that moved from JSON to CBOR.
+- It is the fourth self-describing format in a family with `zujson`,
+  `zuyaml` and `zuxml` (sibling checkouts in `../`). When a design
+  question is not answered here, look at how those packages settle it
+  before inventing something new — `../zujson/CLAUDE.md` and
+  `../zuxml/CLAUDE.md` are the most detailed.
+
+## Current state
+
+The repository is a bare usethis skeleton: `DESCRIPTION` still has
+placeholder Title/Description/Authors, `README.md` is the template,
+`tests/testthat/test-zucbor.R` is the template test, there is no R API,
+and `src/` has no C sources or vendored TinyCBOR yet.
+`R/zucbor-package.R` declares `@useDynLib zucbor, .registration = TRUE`,
+so the package will not install until `src/` contains compiled code with
+an init/registration routine.
+
+`NEWS.md` still has the usethis heading
+`# zucbor (development version)`. The siblings learned that R CMD check
+wants `# zucbor <version>` once that is the only heading, or it emits a
+NEWS NOTE.
+
+## Commands
+
+``` sh
+Rscript -e 'devtools::document()'                  # roxygen -> NAMESPACE + man/
+Rscript -e 'devtools::load_all()'                  # compile + load
+Rscript -e 'devtools::test()'
+Rscript -e 'devtools::test(filter = "zucbor")'     # one file: tests/testthat/test-zucbor.R
+Rscript -e 'devtools::test(shuffle = TRUE)'        # order-independence check
+Rscript -e 'devtools::check(cran = TRUE)'
+Rscript -e 'pkgdown::build_site()'                 # site -> docs/ (gitignored)
+```
+
+testthat edition 3; roxygen2 with markdown enabled
+(`RoxygenNote: 8.0.0`). Never hand-edit `NAMESPACE` or `man/`.
+
+## CI
+
+Workflows in `.github/workflows/` delegate to reusable workflows in
+`pedrobtz/r-actions@v1`:
+
+- `R-CMD-check.yaml` runs a **quick** profile on each push to a pull
+  request and the **full** profile on pushes to `main`. Adding the
+  `full-ci` label to a PR reruns it with the full profile before
+  merging.
+- `coverage.yaml` commits the badge to `.github/badges/coverage.svg` on
+  `main`.
+- `pkgdown.yaml` builds the site and deploys `docs/` to `gh-pages`
+  (<https://pedrobtz.github.io/zucbor/>).
+
+## Conventions carried over from the sibling packages
+
+These are how `zujson`/`zuxml` are built; follow them here unless there
+is a CBOR-specific reason not to.
+
+- **Vendored sources are never edited in place.** They live under
+  `src/vendor/<lib>/`, byte-identical to a pinned upstream release,
+  refreshed by a script in `tools/`. Local configuration goes in a
+  project-owned header outside the vendor tree.
+- **Portable make only** in `src/Makevars`: list object files in
+  `OBJECTS` by hand (R only auto-compiles `src/*.c`, not
+  subdirectories), and no GNU-make features such as `$(wildcard)` or
+  `$(shell)`, which would cost `SystemRequirements: GNU make`. Keep
+  `Makevars.win` in step. Keep `.o`/`.so`/`.dll` out of the build
+  tarball via `.Rbuildignore`.
+- **Naming:** R exports use a format prefix (`json_parse`/`xml_parse` →
+  here presumably `cbor_*`), R and C internals use `zu_`, `.Call` entry
+  points use `zucbor_`.
+- **Errors are classed conditions**, all inheriting a package base class
+  (e.g. `zujson_error`), raised in C where the cause is known. Tests
+  assert on condition class, never message text.
+- **Heap state that must survive a longjmp is owned by R** (finalized
+  external pointers), since `Rf_error()`, `R_CheckUserInterrupt()` and R
+  allocators jump past any `free()`.
+- **Tests are self-sufficient** (inputs built inside each
+  `test_that()`), pass under `shuffle = TRUE`, stay serial (no
+  `Config/testthat/parallel`, so gctorture/valgrind CI legs actually
+  exercise the C code), and keep the suite to a few seconds for CRAN.
+- **Prose is en-GB** (`Language: en-GB` in DESCRIPTION in the siblings),
+  with domain terms in `inst/WORDLIST` via
+  `spelling::update_wordlist()`.
+- Design documents for the siblings live in `.agents/`; if one is
+  written for zucbor, keep it there and keep its mapping tables in sync
+  with the roxygen docs and the tests.

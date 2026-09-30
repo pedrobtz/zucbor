@@ -609,7 +609,7 @@ Named here so CI does not have to discover them:
 - `src/init.c` registers every entry point; `R_useDynamicSymbols(dll, FALSE)`.
 - Licence MIT, matching TinyCBOR and the family. `Authors@R` lists the copyright holders of vendored code as `cph`, with a comment naming TinyCBOR. That is **Intel Corporation** alone: upstream also carries a 2019 S. Phirsov notice, but only in files outside the vendored subset, so that holder is not ours to declare. Re-check at every re-vendoring (`grep Copyright src/vendor/tinycbor/*`). `inst/COPYRIGHTS` records zucbor's and TinyCBOR's notices separately; `LICENSE.note` records provenance.
 - `Language: en-GB`; domain terms in `inst/WORDLIST` via `spelling::update_wordlist()`.
-- `.Rbuildignore` covers `.agents/`, `tools/`, `CLAUDE.md` and design notes.
+- `.Rbuildignore` covers `.agents/`, `tools/`, `.claude/` and design notes. The agent instructions live in `.claude/CLAUDE.md`, not at the root: pkgdown publishes every root-level Markdown file as a page, and has no setting to exclude one.
 - `NEWS.md` carries `# zucbor <version>` before the first check that must be clean.
 
 ---

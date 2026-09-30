@@ -15,7 +15,7 @@ Intended properties that should shape every design decision:
 
 ## Current state
 
-The plan is written: [.agents/design.md](.agents/design.md) is the specification (numbered §1–§20: the R mapping in §6–§7, deterministic encoding §8, errors §10, limits §11, TinyCBOR vendoring and its build traps §13, open questions §19) and [.agents/roadmap.md](.agents/roadmap.md) sequences it into Stages 0–9, each with a **Status:** line. Progress is tracked in the `v0.1.0` milestone: umbrella issue #4, with one `stage` sub-issue per stage (#5 for Stage 0 through #14 for Stage 9), each linking to its heading anchor. Never put status in a stage heading, since that changes the anchor. Read both before starting work; a decision in design §18 is settled unless the work shows it is wrong, and then the design changes in the same commit.
+The plan is written: [.agents/design.md](../.agents/design.md) is the specification (numbered §1–§20: the R mapping in §6–§7, deterministic encoding §8, errors §10, limits §11, TinyCBOR vendoring and its build traps §13, open questions §19) and [.agents/roadmap.md](../.agents/roadmap.md) sequences it into Stages 0–9, each with a **Status:** line. Progress is tracked in the `v0.1.0` milestone: umbrella issue #4, with one `stage` sub-issue per stage (#5 for Stage 0 through #14 for Stage 9), each linking to its heading anchor. Never put status in a stage heading, since that changes the anchor. Read both before starting work; a decision in design §18 is settled unless the work shows it is wrong, and then the design changes in the same commit.
 
 Stages 0–8 are done. `main` carries `0.0.0.9000`, the never-released development version; Stage 9's remaining steps are a human's: set `Version: 0.1.0` and the `NEWS.md` heading, tag `v0.1.0`, submit to CRAN, answer reviewers. The roadmap's Stage 9 table maps each design §20 acceptance criterion to what verifies it.
 
@@ -87,6 +87,8 @@ Workflows in `.github/workflows/` delegate to reusable workflows in `pedrobtz/r-
 - `vendor.yaml`: the vendored-tree guard, the shared-object symbol check and the status-table check.
 - `native-checks.yaml`: UBSan and ASan (with `-UNDEBUG`), valgrind, LTO, gctorture (quick step on PRs), a blocking `rchk`, and the `conformance` job.
 - `hardening.yaml`: `tools/run-lint`, `tools/run-mutation-check`, `tools/check-no-network`, and `tools/run-fuzz` (libFuzzer, canary first; 2 minutes per PR, 30 nightly on a cached corpus). Apple's clang has no libFuzzer.
+
+This file lives in `.claude/`, not the package root, because pkgdown renders every root-level `*.md` as a site page; keep it here.
 
 Stacked pull requests: retarget the next PR to `main` *before* deleting a merged base branch; deleting it first closes the dependent PR.
 

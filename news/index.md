@@ -1,6 +1,6 @@
 # Changelog
 
-## zucbor 0.1.0
+## zucbor 0.0.0.9000
 
 - Initial CRAN release.
 - [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md),

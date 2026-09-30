@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">zucbor</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-danger me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Unreleased version">0.0.0.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -57,7 +57,7 @@
 <div class="section level2">
 <h2 id="current-state">Current state<a class="anchor" aria-label="anchor" href="#current-state"></a></h2>
 <p>The plan is written: <a href=".agents/design.html">.agents/design.md</a> is the specification (numbered §1–§20: the R mapping in §6–§7, deterministic encoding §8, errors §10, limits §11, TinyCBOR vendoring and its build traps §13, open questions §19) and <a href=".agents/roadmap.html">.agents/roadmap.md</a> sequences it into Stages 0–9, each with a <strong>Status:</strong> line. Progress is tracked in the <code>v0.1.0</code> milestone: umbrella issue #4, with one <code>stage</code> sub-issue per stage (#5 for Stage 0 through #14 for Stage 9), each linking to its heading anchor. Never put status in a stage heading, since that changes the anchor. Read both before starting work; a decision in design §18 is settled unless the work shows it is wrong, and then the design changes in the same commit.</p>
-<p>Stages 0–8 are done; version 0.1.0 is prepared, and Stage 9’s remaining steps (tag <code>v0.1.0</code>, submit to CRAN, answer reviewers) are a human’s. The roadmap’s Stage 9 table maps each design §20 acceptance criterion to what verifies it.</p>
+<p>Stages 0–8 are done. <code>main</code> carries <code>0.0.0.9000</code>, the never-released development version; Stage 9’s remaining steps are a human’s: set <code>Version: 0.1.0</code> and the <code>NEWS.md</code> heading, tag <code>v0.1.0</code>, submit to CRAN, answer reviewers. The roadmap’s Stage 9 table maps each design §20 acceptance criterion to what verifies it.</p>
 <p><strong>API:</strong> <code><a href="reference/cbor_decode.html">cbor_decode()</a></code>/<code><a href="reference/cbor_decode.html">cbor_decode_seq()</a></code>, <code><a href="reference/cbor_read.html">cbor_read()</a></code>/<code><a href="reference/cbor_read.html">cbor_read_seq()</a></code>, <code><a href="reference/cbor_validate.html">cbor_validate()</a></code>, <code><a href="reference/cbor_diagnose.html">cbor_diagnose()</a></code>, <code><a href="reference/cbor_encode.html">cbor_encode()</a></code>/<code><a href="reference/cbor_encode.html">cbor_encode_seq()</a></code>, the value classes <code><a href="reference/cbor-values.html">cbor_map()</a></code>, <code><a href="reference/cbor-values.html">cbor_tag()</a></code>, <code><a href="reference/cbor-values.html">cbor_simple()</a></code>, <code><a href="reference/cbor-values.html">cbor_bigint()</a></code>, and <code><a href="reference/zucbor_info.html">zucbor_info()</a></code>.</p>
 <p><strong>Architecture</strong> (design §4):</p>
 <ul><li>
@@ -112,7 +112,7 @@
 <li>
 <code>coverage.yaml</code> commits the badge to <code>.github/badges/coverage.svg</code> on <code>main</code>.</li>
 <li>
-<code>pkgdown.yaml</code> builds the site and deploys <code>docs/</code> to <code>gh-pages</code> (<a href="https://pedrobtz.github.io/zucbor/" class="uri">https://pedrobtz.github.io/zucbor/</a>).</li>
+<code>pkgdown.yaml</code> builds the site and deploys <code>docs/</code> to <code>gh-pages</code> (<a href="https://pedrobtz.github.io/zucbor/" class="uri">https://pedrobtz.github.io/zucbor/</a>). <code>_pkgdown.yml</code> sets <code>development: mode: auto</code>, which decides from the version: <code>0.0.0.9000</code> (never released, now) builds at the root marked <em>unreleased</em>; a release (<code>0.1.0</code>) builds at the root; a later development version (<code>0.1.0.9000</code>) builds into <code>dev/</code>, and the deploy keeps both (<code>clean: false</code>). So after each CRAN release, bump <code>main</code> to <code>x.y.z.9000</code> (with a matching <code>NEWS.md</code> heading).</li>
 <li>
 <code>vendor.yaml</code>: the vendored-tree guard, the shared-object symbol check and the status-table check.</li>
 <li>

@@ -4,23 +4,25 @@
 \name{zucbor-package}
 \alias{zucbor}
 \alias{zucbor-package}
-\title{zucbor: What the Package Does (One Line, Title Case)}
+\title{zucbor: Deterministic and Secure CBOR Encoding and Decoding}
 \description{
-What the package does (one paragraph).
+Encodes R values as Concise Binary Object Representation (CBOR, RFC 8949) and decodes CBOR into ordinary R vectors and lists. Decoding checks the whole input against configurable depth, size and item limits before any R object is built, so untrusted input from network peers and devices cannot drive large allocations. Encoding is deterministic: identical R objects always produce identical bytes.
 }
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://github.com/pedrobtz/zucbor}
   \item \url{https://pedrobtz.github.io/zucbor/}
+  \item Report bugs at \url{https://github.com/pedrobtz/zucbor/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: First Last \email{first.last@example.com}
+\strong{Maintainer}: Pedro Baltazar \email{pedrobtz@gmail.com} [copyright holder]
 
 Authors:
 \itemize{
-  \item First Last \email{first.last@example.com}
+  \item Pedro Baltazar \email{pedrobtz@gmail.com} [copyright holder]
 }
 
 }

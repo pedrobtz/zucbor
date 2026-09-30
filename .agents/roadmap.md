@@ -24,7 +24,7 @@ Sizes are relative: **S** ≈ a sitting, **M** ≈ a few, **L** ≈ the stage is
 
 ## Stage 0 — Repo hygiene and consumer inventory · S
 
-**Status:** not started.
+**Status:** complete.
 
 The package is the `usethis` skeleton; clear it before building on it.
 
@@ -39,6 +39,22 @@ The package is the `usethis` skeleton; clear it before building on it.
 **Exit**
 - `R CMD check --as-cran` passes with only the development-version NOTE.
 - The inventory is written, even if it says "none".
+
+**Consumer inventory (2026-09-30)**
+
+| Candidate | How it would consume zucbor | Confirmed? |
+|---|---|---|
+| `zuhttp` | R-level, `Suggests:`, for an `application/cbor` body helper | No. Its design mentions neither CBOR nor COSE |
+| `zucrypt` | R-level, or C through a table, to build COSE `Sig_structure` bytes deterministically | No. Its design mentions neither CBOR nor COSE |
+| any other sibling | — | None of the checked-out `zu*` repositories mention CBOR or COSE |
+
+**No consumer is confirmed.** So the v1 scope is the R API alone: §19 Q6 (a C API) stays closed, there is no C fixture package to build at Stage 4 or 7, and nothing in the R API is shaped around a particular sibling. The first real consumer is the gate for 1.0.0 (*After v1*).
+
+**What actually happened**
+
+- `R CMD check --as-cran` came back 0/0/0 locally. The development-version NOTE did not appear, because it comes from the CRAN-incoming checks, which `devtools::check()` runs only when asked to.
+- `devtools::document()` with roxygen2 8.1.0 replaced `RoxygenNote: 8.0.0` with `Config/roxygen2/version: 8.1.0`, as it did in zuxml. Keep roxygen2 at 8.1.0 or newer, or `document()` will rewrite `man/`.
+- `git rm` of the template test left `tests/testthat/` empty, so git dropped the directory until `test-init.R` was written. An empty `tests/testthat/` next to `tests/testthat.R` is a hard check error (zuxml Stage 0), so the init test cannot come later.
 
 ---
 

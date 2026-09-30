@@ -1,14 +1,25 @@
 Package: zucbor
-Title: What the Package Does (One Line, Title Case)
+Title: Deterministic and Secure CBOR Encoding and Decoding
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+    person("Pedro", "Baltazar", , "pedrobtz@gmail.com",
+           role = c("aut", "cre", "cph"))
+Description: Encodes R values as Concise Binary Object Representation
+    (CBOR, RFC 8949) and decodes CBOR into ordinary R vectors and lists.
+    Decoding checks the whole input against configurable depth, size and
+    item limits before any R object is built, so untrusted input from
+    network peers and devices cannot drive large allocations. Encoding is
+    deterministic: identical R objects always produce identical bytes.
 License: MIT + file LICENSE
-Encoding: UTF-8
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 8.0.0
+URL: https://github.com/pedrobtz/zucbor,
+    https://pedrobtz.github.io/zucbor/
+BugReports: https://github.com/pedrobtz/zucbor/issues
+Depends: 
+    R (>= 4.1)
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
-URL: https://pedrobtz.github.io/zucbor/
+Encoding: UTF-8
+Language: en-GB
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0

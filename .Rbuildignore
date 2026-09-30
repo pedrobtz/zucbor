@@ -5,3 +5,7 @@
 ^pkgdown$
 ^CLAUDE\.md$
 ^\.agents$
+^tools$
+^src/.*\.o$
+^src/.*\.(so|dll|dylib|a)$
+^cran-comments\.md$

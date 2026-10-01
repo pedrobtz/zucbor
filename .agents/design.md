@@ -112,6 +112,7 @@ The encoder is a separate path with its own two passes (§8).
 # decode
 cbor_decode(x, ...)          # raw -> R value; exactly one data item
 cbor_decode_seq(x, ...)      # raw -> list; an RFC 8742 sequence of zero or more items
+cbor_decode_prefix(x, ...)   # raw -> list(value, consumed); the item x starts with (Stage 11)
 cbor_read(file, ...)         # path or connection -> R value
 cbor_read_seq(file, ...)     # path or connection -> list
 cbor_validate(x, sequence = FALSE, ..., error = FALSE)  # raw -> TRUE/FALSE; the check phase only
@@ -133,7 +134,7 @@ as_cbor(x, ...)              # S3 generic cbor_encode() calls for a class it doe
 zucbor_info()                # TinyCBOR version, compiled limits, defaults
 ```
 
-Thirteen functions in 0.1.0, fourteen with `as_cbor()`, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
+Thirteen functions in 0.1.0, fifteen with `as_cbor()` and `cbor_decode_prefix()`, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
 
 **Why `decode`/`encode`, not `parse`/`write`.** The siblings' verbs are for text formats. RFC 8949 speaks of encoders and decoders, and so do the protocols this package serves; a user reading COSE code in another language will look for those words.
 
@@ -159,11 +160,13 @@ cbor_decode(
 )
 ```
 
-`cbor_decode_seq()`, `cbor_read()`, `cbor_read_seq()` take the same arguments. `cbor_validate()` and `cbor_diagnose()` take `deterministic`, `duplicate_keys` and the three limits; the mapping arguments have no meaning for them. `cbor_validate(error = TRUE)` raises the fault's classed condition (§10) instead of returning `FALSE`, so a caller can learn *why* without building the value; added at Stage 2, when the tests needed exactly that.
+`cbor_decode_seq()`, `cbor_decode_prefix()`, `cbor_read()`, `cbor_read_seq()` take the same arguments. `cbor_validate()` and `cbor_diagnose()` take `deterministic`, `duplicate_keys` and the three limits; the mapping arguments have no meaning for them. `cbor_validate(error = TRUE)` raises the fault's classed condition (§10) instead of returning `FALSE`, so a caller can learn *why* without building the value; added at Stage 2, when the tests needed exactly that.
 
 `x` must be a raw vector. A character string is refused with `zucbor_invalid_argument`: CBOR is bytes, and a string would need an encoding decision that has no right answer. `file` is a path, a URL, or a connection (§9).
 
 `cbor_decode()` requires **exactly one** item. Trailing bytes are `zucbor_parse_error` (`CborErrorGarbageAtEnd`), and an empty input is `zucbor_parse_error` too — `NULL` is a legitimate decoded value (`0xf6`), so "no item" must not look like it. `cbor_decode_seq()` returns a list of however many items the bytes hold, including `list()` for empty input. This is `zuyaml`'s one-document-versus-stream rule.
+
+`cbor_decode_prefix()` (Stage 11) is the third case: one item at the start of `x`, for CBOR inside binary framing (a COSE key inside WebAuthn `authData`, a payload after a CoAP header). It returns `list(value, consumed)`. The check phase stops after the first item (`zu_check_opts.prefix`), and nothing after it is read, not even by TinyCBOR, which preparses nothing past a top-level item; so the rest is neither checked nor trusted, and may be anything. `max_size` still applies to `x` as a whole, which is in memory already. An empty `x`, or an item cut short, is `zucbor_parse_error`. The fuzz target holds two invariants for it: an input that passes as one item passes as a prefix consuming every byte, and a prefix consuming n bytes passes as one item over those n.
 
 ### Encode arguments
 
@@ -803,6 +806,7 @@ Revised targets, which the numbers above meet and which a regression would miss:
 | 28 | Tags zucbor does not convert | Per-call `tag_handlers`, run after the check; no global registry (§6.6, Stage 10) |
 | 29 | Classes zucbor does not know | Exported S3 generic `as_cbor()`, called once per value (§7.5, Stage 10) |
 | 30 | UUID, IP address, decimal fraction | Recipes in the examples article, not built-in classes (Stage 10) |
+| 31 | CBOR inside binary framing | `cbor_decode_prefix()`: first item checked and decoded, the rest not read (§5, Stage 11) |
 
 ---
 

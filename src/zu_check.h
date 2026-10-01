@@ -33,6 +33,9 @@ typedef struct {
     int duplicate_keys;     /* nonzero: accept them */
     int deterministic;      /* nonzero: RFC 8949 section 4.2.1 input only */
     int sequence;           /* nonzero: zero or more items (RFC 8742) */
+    int prefix;             /* nonzero: the first item only; what follows is
+                             * not read (cbor_decode_prefix()). Not with
+                             * sequence. */
 } zu_check_opts;
 
 /* Why a check failed. status is an enumerator name (a CborError, or one of
@@ -53,6 +56,7 @@ typedef struct {
     size_t *counts;
     size_t n, cap;
     size_t n_items;         /* top-level items found */
+    size_t consumed;        /* bytes the items used */
 } zu_plan;
 
 /* Runs the whole check phase over buf. Returns 0 and fills plan (which may

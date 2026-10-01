@@ -242,12 +242,14 @@ outer
 ```
 
 That tagged byte string is five bytes of CBOR followed by one more byte,
-so `cbor_decode()` refuses it, while `cbor_decode_seq()` reads both items:
+so `cbor_decode()` refuses it, `cbor_decode_seq()` reads both items, and
+`cbor_decode_prefix()` reads the first and says where it ended:
 
 ```{r}
 inner <- hex("82 01 61 61 00")
 tryCatch(cbor_decode(inner), zucbor_error = function(e) class(e)[1])
 cbor_decode_seq(inner)
+cbor_decode_prefix(inner)$consumed
 ```
 
 When the embedded item is meant to be decoded, a handler for tag 24 does it

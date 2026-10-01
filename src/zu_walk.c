@@ -24,7 +24,7 @@
  * for deterministic = TRUE. Three checks TinyCBOR offers are the walk's:
  *  - UTF-8, not CborValidateUtf8: in the same pass, and with an offset;
  *  - trailing bytes, not CborValidateCompleteData: in a sequence the next
- *    item's bytes are not garbage;
+ *    item's bytes are not garbage, and for a prefix they are not read;
  *  - tag content, not CborValidateTagUse: TinyCBOR 7.0's table allows only
  *    an integer under tag 1, where RFC 8949 section 3.4.2 also allows a
  *    float, so it refuses Appendix A's 1(1363896240.5). See tag_content_ok(). */
@@ -586,6 +586,7 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
         plan->counts = NULL;
         plan->n = plan->cap = 0;
         plan->n_items = 0;
+        plan->consumed = 0;
     }
 
     if (len == 0) {
@@ -613,8 +614,15 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
                 return fail_cbor(&w, err, NULL);
         }
         pos = (size_t)(cbor_value_get_next_byte(&it) - buf);
-        if (plan)
+        if (plan) {
             plan->n_items++;
+            plan->consumed = pos;
+        }
+        /* A prefix stops here: whatever follows is the caller's framing,
+         * and TinyCBOR has not read it (at the top level it preparses
+         * nothing past the item). */
+        if (opt->prefix)
+            return 0;
         if (!opt->sequence && pos < len)  /* GUARD: trailing-bytes */
             return fail_cbor(&w, CborErrorGarbageAtEnd, buf + pos);
     }

@@ -905,10 +905,11 @@ static SEXP build(zu_builder *b, CborValue *it, int *kind)
 
 /* ---- entry point ------------------------------------------------------------------- */
 
-/* opts: sequence, deterministic, duplicate_keys, max_depth, simplify,
- * map_keys, tags, big_integers (integer codes, validated in R). handlers
+/* opts: mode (0 one item, 1 a sequence, 2 a prefix), deterministic,
+ * duplicate_keys, max_depth, simplify, map_keys, tags, big_integers
+ * (integer codes, validated in R). handlers
  * are the caller's tag handlers, or NULL.
- * Returns list(fault, value): a check-phase fault is returned for R to
+ * Returns list(fault, value, consumed): a check-phase fault is returned for R to
  * raise with the user's call; a build-phase one is raised from here. */
 SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
 {
@@ -924,7 +925,10 @@ SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
         Rf_error("zucbor_decode: arguments must be validated in R");
     const int *o = INTEGER(opts);
     zu_check_opts opt;
-    opt.sequence = o[0];
+    if (o[0] < 0 || o[0] > 2)
+        Rf_error("zucbor_decode: arguments must be validated in R");
+    opt.sequence = o[0] == 1;
+    opt.prefix = o[0] == 2;
     opt.deterministic = o[1];
     opt.duplicate_keys = o[2];
     opt.max_depth = o[3];
@@ -937,7 +941,7 @@ SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
     size_t len = (size_t) XLENGTH(x);
     zu_plan plan;
     zu_fault fault;
-    SEXP out = PROTECT(Rf_allocVector(VECSXP, 2));
+    SEXP out = PROTECT(Rf_allocVector(VECSXP, 3));
     if (zu_check(buf, len, &opt, &plan, &fault)) {
         SET_VECTOR_ELT(out, 0, zu_fault_sexp(&fault));
         UNPROTECT(1);
@@ -967,6 +971,7 @@ SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
         int kind;
         cbor_parser_init(buf, len, 0, &parser, &it);
         SET_VECTOR_ELT(out, 1, build(&b, &it, &kind));
+        SET_VECTOR_ELT(out, 2, Rf_ScalarReal((double) plan.consumed));
     } else {
         SEXP items = PROTECT(Rf_allocVector(VECSXP, (R_xlen_t) plan.n_items));
         SET_VECTOR_ELT(out, 1, items);

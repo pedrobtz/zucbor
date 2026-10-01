@@ -6,7 +6,9 @@
  *   deterministic = TRUE passes  =>  FALSE passes
  *   duplicate_keys = FALSE passes =>  TRUE passes
  *   a max_depth passes           =>  the ceiling passes
- *   an item passes               =>  so does the sequence of that one item */
+ *   an item passes               =>  so does the sequence of that one item
+ *   an item passes               =>  as a prefix, consuming every byte
+ *   a prefix passes, consuming n =>  the first n bytes pass as an item */
 #include <stddef.h>
 #include <stdint.h>
 
@@ -31,6 +33,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     opt.duplicate_keys = (o >> 2) & 1;
     opt.max_depth = 1 + ((o >> 3) & 15) * 8;      /* 1 .. 121 */
     opt.max_items = (o & 0x80) ? 64 : UINT64_MAX;
+    opt.prefix = 0;
     data++;
     size--;
 
@@ -49,6 +52,17 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         relaxed.max_items = UINT64_MAX;
         relaxed.sequence = 1;
         if (!check(data, size, relaxed, NULL))
+            __builtin_trap();
+    }
+    if (!opt.sequence) {
+        zu_check_opts prefix = opt;
+        zu_plan pp;
+        prefix.prefix = 1;
+        int pok = check(data, size, prefix, &pp);
+        if (ok && (!pok || pp.consumed != size))
+            __builtin_trap();
+        if (pok && (pp.consumed == 0 || pp.consumed > size || pp.n_items != 1
+                    || !check(data, pp.consumed, opt, NULL)))
             __builtin_trap();
     }
     zu_arena_reset();

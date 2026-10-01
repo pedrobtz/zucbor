@@ -73,3 +73,13 @@ mixed_value <- function() {
 fault_class <- function(inputs, f = function(x) cbor_validate(x, error = TRUE)) {
   vapply(inputs, function(x) tryCatch({f(x); "ok"}, error = function(e) class(e)[1]), "")
 }
+
+# Registers an as_cbor() method for the calling test only. A method defined
+# inside test_that() is invisible to S3 dispatch, which looks in the
+# namespace's registry and the global environment, not the test's frame.
+local_as_cbor <- function(class, method, env = parent.frame()) {
+  table <- get(".__S3MethodsTable__.", envir = asNamespace("zucbor"))
+  name <- paste0("as_cbor.", class)
+  assign(name, method, envir = table)
+  withr::defer(rm(list = name, envir = table), envir = env)
+}

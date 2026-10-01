@@ -34,6 +34,8 @@ typedef struct {
     SEXP call;
     zu_entry **pool;        /* map entry arrays, one per depth, reused */
     R_xlen_t *pool_cap;
+    int *pool_top;          /* deepest pool entry set; shared, like pool */
+    SEXP ns;                /* the namespace, where as_cbor() is called from */
 } zu_encoder;
 
 static void encode(zu_encoder *e, SEXP x, int depth);
@@ -67,6 +69,7 @@ static void fail_encode(zu_encoder *e, const char *status, const char *detail)
 /* ---- output ------------------------------------------------------------------ */
 
 static void grow_output(zu_encoder *e, size_t need);
+static void free_output(SEXP owner);
 
 static void put(zu_encoder *e, const void *p, size_t n)
 {
@@ -314,23 +317,23 @@ static void sort_entries(zu_entry *a, R_xlen_t n, int (*cmp)(const zu_entry *, c
         memcpy(a, src, (size_t) n * sizeof(zu_entry));
 }
 
-/* Encodes one key on its own, into scratch, and returns its bytes. A key
- * from R names is always a text string, whatever auto_unbox says. */
-static const uint8_t *encode_key(zu_encoder *e, SEXP key, SEXP name, int depth, size_t *len)
+/* Encodes one key on its own and returns its bytes, in R_alloc() memory.
+ * One pass, into a buffer of its own owned like the output: a key may hold
+ * a class with an as_cbor() method, which must run once, not once per
+ * pass. */
+static const uint8_t *encode_key(zu_encoder *e, SEXP key, int depth, size_t *len)
 {
     zu_encoder sub = *e;
-    uint8_t *buf = NULL;
-    sub.owner = R_NilValue;         /* count, then write into scratch */
-    for (int pass = 0; pass < 2; pass++) {
-        sub.out = buf;
-        sub.pos = 0;
-        if (name != R_NilValue)
-            put_text(&sub, name);
-        else
-            encode(&sub, key, depth);
-        if (pass == 0)
-            buf = (uint8_t *) R_alloc(sub.pos ? sub.pos : 1, 1);
-    }
+    sub.out = NULL;
+    sub.pos = sub.cap = 0;
+    sub.owner = PROTECT(R_MakeExternalPtr(NULL, R_NilValue, R_NilValue));
+    R_RegisterCFinalizerEx(sub.owner, free_output, TRUE);
+    encode(&sub, key, depth);
+    uint8_t *buf = (uint8_t *) R_alloc(sub.pos ? sub.pos : 1, 1);
+    if (sub.pos)
+        memcpy(buf, sub.out, sub.pos);
+    free_output(sub.owner);
+    UNPROTECT(1);
     *len = sub.pos;
     return buf;
 }
@@ -344,6 +347,8 @@ static void put_map(zu_encoder *e, SEXP keys, SEXP names, SEXP values, R_xlen_t 
     if (!e->pool[depth] || e->pool_cap[depth] < n + 1) {
         e->pool_cap[depth] = n + 1 > 2 * e->pool_cap[depth] ? n + 1 : 2 * e->pool_cap[depth];
         e->pool[depth] = (zu_entry *) R_alloc((size_t) e->pool_cap[depth], sizeof(zu_entry));
+        if (depth > *e->pool_top)
+            *e->pool_top = depth;
     }
     zu_entry *entries = e->pool[depth];
     int text = keys == R_NilValue;
@@ -360,7 +365,7 @@ static void put_map(zu_encoder *e, SEXP keys, SEXP names, SEXP values, R_xlen_t 
             if (!zu_utf8_valid(entries[i].key, entries[i].key_len))
                 fail_encode(e, ZU_ERR_INVALID_VALUE, "a name is not valid UTF-8");
         } else {
-            entries[i].key = encode_key(e, VECTOR_ELT(keys, i), R_NilValue, depth, &entries[i].key_len);
+            entries[i].key = encode_key(e, VECTOR_ELT(keys, i), depth, &entries[i].key_len);
         }
         entries[i].index = i;
     }
@@ -380,6 +385,15 @@ static void put_map(zu_encoder *e, SEXP keys, SEXP names, SEXP values, R_xlen_t 
             encode_element(e, values, entries[i].index, depth);
     }
     vmaxset(vmax);
+    /* That released the pools of the maps nested in this one: they were
+     * allocated after vmax. Forget them, or the next map at their depth
+     * would write into released memory. */
+    for (int k = depth + 1; k <= *e->pool_top; k++) {
+        e->pool[k] = NULL;
+        e->pool_cap[k] = 0;
+    }
+    if (*e->pool_top > depth)
+        *e->pool_top = depth;
 }
 
 /* Names that can be map keys: present on every element, not NA, not "". */
@@ -473,9 +487,78 @@ static void check_depth(zu_encoder *e, int depth)
         fail_encode(e, ZU_ERR_DEPTH_LIMIT, NULL);
 }
 
-/* depth is the level of the container x would be; a scalar is no level. */
+/* ---- as_cbor() ------------------------------------------------------------------ */
+
+/* Classes cbor_encode() writes itself, or refuses itself. "AsIs" only marks
+ * a value as not to be unboxed, so it neither counts as known nor asks for
+ * a conversion. */
+static const char *const known_classes[] = {
+    "POSIXct", "Date", "factor", "cbor_simple", "cbor_bigint", "cbor_tag",
+    "cbor_map", "data.frame", "POSIXlt", NULL
+};
+
+static int wants_conversion(SEXP x)
+{
+    if (!Rf_isObject(x))
+        return 0;
+    SEXP klass = Rf_getAttrib(x, R_ClassSymbol);
+    if (TYPEOF(klass) != STRSXP)
+        return 0;
+    int unknown = 0;
+    for (R_xlen_t i = 0; i < XLENGTH(klass); i++) {
+        const char *c = CHAR(STRING_ELT(klass, i));
+        for (const char *const *k = known_classes; *k; k++)
+            if (strcmp(c, *k) == 0)
+                return 0;
+        if (strcmp(c, "AsIs") != 0)
+            unknown = 1;
+    }
+    return unknown;
+}
+
+/* as_cbor(x), evaluated in a fresh environment whose parent is the
+ * namespace: S3 dispatch finds methods registered by any package and those
+ * in the global environment, and x is bound by name, so a method's error
+ * shows `x`, not the deparsed value. */
+static SEXP convert(zu_encoder *e, SEXP x)
+{
+    SEXP env = PROTECT(R_NewEnv(e->ns, FALSE, 1));
+    SEXP sym = Rf_install("x");
+    Rf_defineVar(sym, x, env);
+    SEXP expr = PROTECT(Rf_lang2(Rf_install("as_cbor"), sym));
+    SEXP out = Rf_eval(expr, env);
+    UNPROTECT(2);
+    return out;
+}
+
+static void encode_value(zu_encoder *e, SEXP x, int depth, int may_convert);
+
 static void encode(zu_encoder *e, SEXP x, int depth)
 {
+    encode_value(e, x, depth, 1);
+}
+
+/* depth is the level of the container x would be; a scalar is no level.
+ * An object of a class this encoder does not know goes through as_cbor()
+ * once (design section 7.5): the method's result is not converted again,
+ * though its elements are, so no chain of methods can loop. */
+static void encode_value(zu_encoder *e, SEXP x, int depth, int may_convert)
+{
+    if (may_convert && wants_conversion(x)) {
+        SEXP y = PROTECT(convert(e, x));
+        if (y != x) {
+            SEXP kx = PROTECT(Rf_getAttrib(x, R_ClassSymbol));
+            SEXP ky = PROTECT(Rf_getAttrib(y, R_ClassSymbol));
+            if (R_compute_identical(kx, ky, 16))
+                fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE,
+                            "as_cbor() returned an object of the class it was given");
+            UNPROTECT(2);
+            encode_value(e, y, depth, 0);
+            UNPROTECT(1);
+            return;
+        }
+        UNPROTECT(1);
+    }
     switch (TYPEOF(x)) {
     case NILSXP:
         put_byte(e, 0xf6);
@@ -586,7 +669,7 @@ static void grow_output(zu_encoder *e, size_t need)
     R_SetExternalPtrAddr(e->owner, p);
 }
 
-SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call)
+SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call, SEXP ns)
 {
     if (TYPEOF(opts) != INTSXP || XLENGTH(opts) != 4)
         Rf_error("zucbor_encode: arguments must be validated in R");
@@ -598,6 +681,9 @@ SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call)
     int self_describe = o[2];
     e.max_depth = o[3];
     e.call = call;
+    e.ns = ns;
+    if (TYPEOF(ns) != ENVSXP)
+        Rf_error("zucbor_encode: arguments must be validated in R");
     if (e.max_depth < 1 || e.max_depth > ZU_MAX_DEPTH_CAP)
         Rf_error("zucbor_encode: limits must be validated in R");
     /* depth runs to max_depth + 1: a map's entries sit one level below it */
@@ -605,6 +691,8 @@ SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call)
     e.pool_cap = (R_xlen_t *) R_alloc((size_t) e.max_depth + 2, sizeof(R_xlen_t));
     memset(e.pool, 0, ((size_t) e.max_depth + 2) * sizeof(zu_entry *));
     memset(e.pool_cap, 0, ((size_t) e.max_depth + 2) * sizeof(R_xlen_t));
+    int pool_top = 0;
+    e.pool_top = &pool_top;
 
     e.owner = PROTECT(R_MakeExternalPtr(NULL, R_NilValue, R_NilValue));
     R_RegisterCFinalizerEx(e.owner, free_output, TRUE);

@@ -96,4 +96,31 @@ for (x in list(deep, list(a = 1, 2), c(a = 1, a = 2), cbor_map(list(1L, 1), list
 big <- lapply(1:5000, function(i) list(k = i, v = as.character(i)))
 invisible(cbor_encode(stats::setNames(big, sprintf("k%05d", sample.int(5000)))))
 
+# Maps at one depth under different parents, with unsorted keys: each
+# reuses the entry pool of that depth, which a parent's vmaxset() once
+# released (Stage 10). A use after free here is what ASan is for.
+inner <- function(i) stats::setNames(as.list(1:40), paste0("k", 40:1, "_", i))
+nest <- list(p = list(a = inner(1), b = inner(2)), q = list(c = inner(3), d = inner(4)),
+             r = cbor_map(list(cbor_map(list(2L, 1L), list(inner(5), inner(6)))), list(inner(7))))
+nb <- cbor_encode(nest)
+stopifnot(identical(cbor_encode(cbor_decode(nb)), nb))
+
+# Tag handlers and as_cbor(): user code that returns, errors and nests in
+# the middle of the build and the encoder (Stage 10).
+h <- list("99" = function(v) v, "24" = function(v) cbor_decode(v, max_depth = 4),
+          "37" = function(v) stop("refused"), "0" = function(v) numeric(1e5))
+for (x in c(a, list(cbor_encode(list(cbor_tag(99, 1:3), cbor_tag(24, nb), cbor_tag(0, "x")))))) {
+  tryCatch(cbor_decode(x, tag_handlers = h), zucbor_error = function(e) NULL)
+  tryCatch(cbor_decode_seq(x, tags = "keep", tag_handlers = h), zucbor_error = function(e) NULL)
+}
+registerS3method("as_cbor", "zu_san", function(x, ...) {
+  if (identical(unclass(x), 0L)) stop("refused")
+  cbor_tag(24, cbor_encode(list(unclass(x), nest)))
+}, envir = asNamespace("zucbor"))
+san <- function(v) structure(v, class = "zu_san")
+for (x in list(san(1L), list(a = san(2L), b = san(0L)),
+               cbor_map(list(san(3L), san(4L)), list(nest, san(5L))))) {
+  tryCatch(cbor_encode(x), error = function(e) NULL)
+}
+
 cat("sanitizer exercise complete\n")

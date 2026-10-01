@@ -49,6 +49,10 @@ typedef struct {
     int simplify, map_keys, tags, big_integers, duplicate_keys;
     SEXP call;
     uint64_t items;
+    const double *handler_tags;     /* sorted; NULL when there are no handlers */
+    R_xlen_t n_handlers;
+    SEXP handlers;                  /* the functions, in handler_tags' order */
+    SEXP ns;
 } zu_builder;
 
 static SEXP build(zu_builder *b, CborValue *it, int *kind);
@@ -299,12 +303,65 @@ static SEXP bignum(zu_builder *b, CborTag tag, CborValue *it, int *kind, const u
     return out;
 }
 
+/* The caller's handler for this tag, or R_NilValue. Handler names are
+ * whole numbers up to 2^53, so a larger tag, which a double would round,
+ * has none. */
+static SEXP find_handler(const zu_builder *b, CborTag tag)
+{
+    if (!b->n_handlers || tag > (UINT64_C(1) << 53))
+        return R_NilValue;
+    double t = (double) tag;
+    R_xlen_t lo = 0, hi = b->n_handlers;
+    while (lo < hi) {
+        R_xlen_t mid = lo + (hi - lo) / 2;
+        if (b->handler_tags[mid] < t)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    return lo < b->n_handlers && b->handler_tags[lo] == t ? VECTOR_ELT(b->handlers, lo)
+                                                          : R_NilValue;
+}
+
+/* zu_run_handler(handler, value, tag, call) in R, which wraps an error as
+ * zucbor_handler_error. User code runs here, in the middle of the build:
+ * that is safe because everything the build holds is PROTECTed or
+ * R_alloc()ed (design section 12), and the input was checked whole before
+ * the first handler ran. The arguments are bound in a fresh environment,
+ * so nothing is evaluated twice and a traceback shows names, not values. */
+static SEXP run_handler(zu_builder *b, SEXP handler, CborTag tag, SEXP value)
+{
+    PROTECT(value);
+    SEXP env = PROTECT(R_NewEnv(b->ns, FALSE, 4));
+    SEXP s_handler = Rf_install("handler"), s_value = Rf_install("value");
+    SEXP s_tag = Rf_install("tag"), s_call = Rf_install("call");
+    Rf_defineVar(s_handler, handler, env);
+    Rf_defineVar(s_value, value, env);
+    SEXP t = PROTECT(Rf_ScalarReal((double) tag));
+    Rf_defineVar(s_tag, t, env);
+    Rf_defineVar(s_call, b->call, env);
+    SEXP expr = PROTECT(Rf_lang5(Rf_install("zu_run_handler"), s_handler, s_value, s_tag, s_call));
+    SEXP out = Rf_eval(expr, env);
+    UNPROTECT(4);
+    return out;
+}
+
 static SEXP build_tag(zu_builder *b, CborValue *it, int *kind)
 {
     const uint8_t *at = cbor_value_get_next_byte(it);
     CborTag tag;
     cbor_value_get_tag(it, &tag);
     advance(b, it, at);
+
+    /* A handler wins over the conversions below and over tags = "keep". It
+     * gets the content as decoded with the same options. */
+    SEXP handler = find_handler(b, tag);
+    if (handler != R_NilValue) {
+        int inner;
+        SEXP value = build(b, it, &inner);
+        *kind = K_OTHER;
+        return run_handler(b, handler, tag, value);
+    }
 
     if (b->tags == TAGS_KEEP) {
         int inner;
@@ -849,12 +906,21 @@ static SEXP build(zu_builder *b, CborValue *it, int *kind)
 /* ---- entry point ------------------------------------------------------------------- */
 
 /* opts: sequence, deterministic, duplicate_keys, max_depth, simplify,
- * map_keys, tags, big_integers (integer codes, validated in R).
+ * map_keys, tags, big_integers (integer codes, validated in R). handlers
+ * are the caller's tag handlers, or NULL.
  * Returns list(fault, value): a check-phase fault is returned for R to
  * raise with the user's call; a build-phase one is raised from here. */
-SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call)
+SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
 {
     if (TYPEOF(x) != RAWSXP || TYPEOF(opts) != INTSXP || XLENGTH(opts) != 8)
+        Rf_error("zucbor_decode: arguments must be validated in R");
+    /* handlers: NULL, or list(tags, functions, namespace), from R. */
+    if (handlers != R_NilValue
+        && (TYPEOF(handlers) != VECSXP || XLENGTH(handlers) != 3
+            || TYPEOF(VECTOR_ELT(handlers, 0)) != REALSXP
+            || TYPEOF(VECTOR_ELT(handlers, 1)) != VECSXP
+            || XLENGTH(VECTOR_ELT(handlers, 0)) != XLENGTH(VECTOR_ELT(handlers, 1))
+            || TYPEOF(VECTOR_ELT(handlers, 2)) != ENVSXP))
         Rf_error("zucbor_decode: arguments must be validated in R");
     const int *o = INTEGER(opts);
     zu_check_opts opt;
@@ -888,6 +954,12 @@ SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call)
     b.tags = o[6];
     b.big_integers = o[7];
     b.call = call;
+    if (handlers != R_NilValue) {
+        b.handler_tags = REAL(VECTOR_ELT(handlers, 0));
+        b.n_handlers = XLENGTH(VECTOR_ELT(handlers, 0));
+        b.handlers = VECTOR_ELT(handlers, 1);
+        b.ns = VECTOR_ELT(handlers, 2);
+    }
 
     if (!opt.sequence) {
         CborParser parser;

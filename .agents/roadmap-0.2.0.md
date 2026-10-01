@@ -33,11 +33,15 @@ A survey of the most-used CBOR libraries elsewhere, read from their own document
 
 Sizes as before: **S** ≈ a sitting, **M** ≈ a few, **L** ≈ the stage is the week.
 
+**Tracking.** The `v0.2.0` milestone holds umbrella issue #29, with one `stage` sub-issue per stage: Stage 10 is #30, and so on to Stage 16, which is #36. Each links to its heading here. Close a stage's issue when its exit criteria pass, and update its **Status:** line in the same PR. As in the 0.1.0 roadmap, status never goes in a heading.
+
+**Context:** 0.1.0 has not been submitted when this work starts (`main` is `0.0.0.9000`), so these stages land on `main` before the first release. Principle 3 still binds: whatever is released first, existing values keep 0.1.0's bytes.
+
 ---
 
 ## Stage 10 — Tag handlers and an encoding generic · M
 
-**Status:** not started.
+**Status:** done, 2026-10-01 (#30). Design §6.6, §7.5, §10, §12; decisions 28–30.
 
 Lets a caller give meaning to a tag zucbor does not convert, and teach `cbor_encode()` a class it does not know, without the package growing a class for each.
 
@@ -55,6 +59,15 @@ Lets a caller give meaning to a tag zucbor does not convert, and teach `cbor_enc
 - A handler that errors, one that returns a huge object, and one that calls `cbor_decode()` again are all tested. The last must see its own limits, not the outer call's.
 - gctorture, rchk and the UBSan and ASan jobs are clean over the handler path. The interrupt test passes with a handler in the input.
 - The cross-platform encoding fixture is unchanged.
+
+**What actually happened**
+
+- The proposed decisions held as written. Three details were settled on the way: an `as_cbor()` method's result is not converted again (only its elements are), so no chain of methods can loop and nothing needs counting; `AsIs` alone neither counts as known nor asks for a call, so `I(x)` of a class with a method is still converted; and an error in a method propagates unchanged, unlike one in a handler, because a method runs on the caller's data, not on input.
+- **Map keys are now encoded in one pass.** Before, a non-text key was encoded twice, once to measure it, which would have run a key's `as_cbor()` method twice. It now goes into a buffer of its own owned like the output (§12).
+- **A latent use after free was found by reading the encoder.** The per-depth map entry pools of Stage 8 could be allocated inside a parent map's `vmaxset()` mark, released with it, and reused by the next map at that depth under a different parent. No test or sanitizer had caught it, because the released block was not reused in between on the platforms tested. A map's end now forgets every deeper pool, and `tools/sanitizer-exercise.R`, which is what the ASan job runs, now has the shape that triggers it, as does `test-handlers.R`.
+- **A design statement was wrong.** §6.6 said `tags = "keep"` reads a tag whose content has the wrong type; the check refuses it whatever `tags` says, and always has. Corrected rather than implemented: validity is the check's, and a handler gives meaning to valid content.
+- Handler names are checked by their digits, not only as numbers: `"9007199254740993"` parses as 2^53 and would otherwise have matched that handler.
+- The recipes went into the examples article: UUIDs (37) round-trip with a class and a method, IP addresses (52, 54) decode to text, and decimal fractions (4) round-trip through the `decimal` package, with the chunk skipped when it is not installed. A handler for tag 24 shows embedded CBOR decoded in place, with limits of its own.
 
 ---
 

@@ -32,6 +32,9 @@ string, a tag number beyond 2^53, or an integer beyond 2^53 with
 \item{\code{zucbor_unsupported_type}}{\code{\link[=cbor_encode]{cbor_encode()}} was given an R value
 with no CBOR form, such as a function, an environment, \code{POSIXlt} or a
 data frame.}
+\item{\code{zucbor_handler_error}}{A function in \code{\link[=cbor_decode]{cbor_decode()}}'s
+\code{tag_handlers} raised an error. The condition carries \code{tag}, the tag
+number, and \code{parent}, the error the handler raised.}
 \item{\code{zucbor_limit_error}}{A limit was reached. The subclasses
 \code{zucbor_depth_limit}, \code{zucbor_size_limit} and \code{zucbor_item_limit} name
 which one.}

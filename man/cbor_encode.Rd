@@ -56,8 +56,9 @@ each value exactly; and map entries sorted by their encoded keys.
 
 A length-one atomic vector is a single value, not an array, unless it is
 wrapped in \code{\link[=I]{I()}} or \code{auto_unbox = FALSE}. A matrix is a flat array in
-column-major order. A vector whose class zucbor does not know is written
-as its underlying type.
+column-major order. An object whose class zucbor does not know goes
+through \code{\link[=as_cbor]{as_cbor()}} first, so a method can say how to write it; without
+one it is written as its underlying type.
 
 Whole doubles become integers because R has no integer literal: \code{-7}
 written in R is a double, and as a CBOR float it would be a different
@@ -92,5 +93,5 @@ identical(cbor_encode(list(b = 1, a = 2)), cbor_encode(list(a = 2, b = 1)))
 cbor_encode_seq(list(1, "a", TRUE))
 }
 \seealso{
-\code{\link[=cbor_decode]{cbor_decode()}}, \link{cbor-values}.
+\code{\link[=cbor_decode]{cbor_decode()}}, \code{\link[=as_cbor]{as_cbor()}}, \link{cbor-values}.
 }

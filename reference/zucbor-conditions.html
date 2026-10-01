@@ -91,6 +91,11 @@ string, a tag number beyond 2^53, or an integer beyond 2^53 with
 with no CBOR form, such as a function, an environment, <code>POSIXlt</code> or a
 data frame.</p></dd>
 
+<dt><code>zucbor_handler_error</code></dt>
+<dd><p>A function in <code><a href="cbor_decode.html">cbor_decode()</a></code>'s
+<code>tag_handlers</code> raised an error. The condition carries <code>tag</code>, the tag
+number, and <code>parent</code>, the error the handler raised.</p></dd>
+
 <dt><code>zucbor_limit_error</code></dt>
 <dd><p>A limit was reached. The subclasses
 <code>zucbor_depth_limit</code>, <code>zucbor_size_limit</code> and <code>zucbor_item_limit</code> name

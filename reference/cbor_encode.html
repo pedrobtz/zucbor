@@ -99,8 +99,9 @@ as <code><a href="cbor_decode.html">cbor_decode()</a></code> does, so its output
 
 <table class="table table"><tr><td>R</td><td>CBOR</td></tr><tr><td><code>NULL</code>, <code>NA</code> of any type</td><td><code>null</code></td></tr><tr><td><code>TRUE</code>, <code>FALSE</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td><code>integer</code></td><td>integer</td></tr><tr><td><code>double</code>, whole, within CBOR's integer range, not <code>-0</code></td><td>integer</td></tr><tr><td>any other <code>double</code>, including <code>NaN</code>, <code>Inf</code> and <code>-0</code></td><td>float, shortest exact width</td></tr><tr><td><code>character</code></td><td>text string, UTF-8</td></tr><tr><td><code>raw</code></td><td>one byte string, whatever its length</td></tr><tr><td><code>factor</code></td><td>its labels, as text</td></tr><tr><td><code>POSIXct</code></td><td>tag 1: whole seconds as an integer, else a float</td></tr><tr><td><code>Date</code></td><td>tag 1004 <code>"YYYY-MM-DD"</code>; tag 100 (days) outside years 0000-9999</td></tr><tr><td><code>cbor_bigint</code></td><td>integer, or tag 2 or 3 beyond CBOR's integer range</td></tr><tr><td><code>cbor_map</code>, <code>cbor_tag</code>, <code>cbor_simple</code></td><td>a map, a tagged item, a simple value</td></tr><tr><td>unnamed list or vector</td><td>array</td></tr><tr><td>fully named list or vector</td><td>map with text keys</td></tr></table><p>A length-one atomic vector is a single value, not an array, unless it is
 wrapped in <code><a href="https://rdrr.io/r/base/AsIs.html" class="external-link">I()</a></code> or <code>auto_unbox = FALSE</code>. A matrix is a flat array in
-column-major order. A vector whose class zucbor does not know is written
-as its underlying type.</p>
+column-major order. An object whose class zucbor does not know goes
+through <code><a href="as_cbor.html">as_cbor()</a></code> first, so a method can say how to write it; without
+one it is written as its underlying type.</p>
 <p>Whole doubles become integers because R has no integer literal: <code>-7</code>
 written in R is a double, and as a CBOR float it would be a different
 value from the integer a COSE algorithm identifier needs. So <code>1L</code> and <code>1</code>
@@ -122,7 +123,7 @@ comes back as an integer; <code>list(1L)</code> and <code>1L</code> both encode 
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="cbor_decode.html">cbor_decode()</a></code>, <a href="cbor-values.html">cbor-values</a>.</p></div>
+    <div class="dont-index"><p><code><a href="cbor_decode.html">cbor_decode()</a></code>, <code><a href="as_cbor.html">as_cbor()</a></code>, <a href="cbor-values.html">cbor-values</a>.</p></div>
     </div>
 
     <div class="section level2">

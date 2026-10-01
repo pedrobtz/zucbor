@@ -155,6 +155,143 @@ uri$value
 #> [1] "http://www.example.com"
 ```
 
+## Tags of your own
+
+zucbor converts a handful of tags; the rest come back as `cbor_tag`. Two
+hooks give any other tag a meaning in R, without zucbor knowing about
+it: `tag_handlers` when decoding, and an
+[`as_cbor()`](https://pedrobtz.github.io/zucbor/reference/as_cbor.md)
+method when encoding. Together they make a class of your own round-trip.
+Handlers run only after the whole input has passed its checks, so they
+never see malformed bytes.
+
+### UUIDs (tag 37)
+
+RFC 9562 UUIDs travel as tag 37 around their 16 bytes. Here they become
+a small class holding the usual text form:
+
+``` r
+
+uuid <- function(text) structure(tolower(text), class = "uuid")
+format.uuid <- function(x, ...) unclass(x)
+print.uuid <- function(x, ...) print(paste0("<uuid ", format(x), ">"), quote = FALSE)
+
+as_cbor.uuid <- function(x, ...) {
+  h <- gsub("-", "", unclass(x))
+  cbor_tag(37, as.raw(strtoi(substring(h, seq(1, 31, 2), seq(2, 32, 2)), 16L)))
+}
+uuid_from_bytes <- function(bytes) {
+  # The content is checked CBOR, but not checked to be a UUID: that is ours.
+  if (!is.raw(bytes) || length(bytes) != 16L) stop("a UUID is 16 bytes")
+  h <- paste(sprintf("%02x", as.integer(bytes)), collapse = "")
+  uuid(paste(substring(h, c(1, 9, 13, 17, 21), c(8, 12, 16, 20, 32)), collapse = "-"))
+}
+
+id <- uuid("F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6")
+bytes <- cbor_encode(list(id = id, n = 1L))
+cbor_diagnose(bytes)
+#> [1] "{\"n\": 1, \"id\": 37(h'f81d4fae7dec11d0a76500a0c91e6bf6')}"
+
+cbor_decode(bytes, tag_handlers = list("37" = uuid_from_bytes))
+#> $n
+#> [1] 1
+#> 
+#> $id
+#> [1] <uuid f81d4fae-7dec-11d0-a765-00a0c91e6bf6>
+```
+
+A method defined in a script is found from the global environment. A
+package registers it instead, with `S3method(zucbor::as_cbor, uuid)` in
+its `NAMESPACE` (roxygen: `@exportS3Method zucbor::as_cbor`).
+
+### IP addresses (tags 52 and 54)
+
+RFC 9164 writes an IPv4 address as tag 52 around 4 bytes and an IPv6
+address as tag 54 around 16, and a prefix as an array of its length and
+the address bytes with trailing zero bytes left out. Decoding them to
+text takes two handlers:
+
+``` r
+
+ip_text <- function(v, width) {
+  prefix <- NULL
+  if (is.list(v)) {                              # [length, bytes]: a prefix
+    prefix <- v[[1]]
+    v <- v[[2]]
+  }
+  b <- as.integer(c(v, raw(width - length(v))))  # put back the zero bytes
+  addr <- if (width == 4) {
+    paste(b, collapse = ".")
+  } else {
+    paste(sprintf("%x", b[c(TRUE, FALSE)] * 256L + b[c(FALSE, TRUE)]), collapse = ":")
+  }
+  if (is.null(prefix)) addr else paste0(addr, "/", prefix)
+}
+ip <- list("52" = function(v) ip_text(v, 4), "54" = function(v) ip_text(v, 16))
+
+cbor_decode(hex("d8 34 44 c0 00 02 01"), tag_handlers = ip)            # 192.0.2.1
+#> [1] "192.0.2.1"
+cbor_decode(hex("d8 34 82 18 18 43 c0 00 02"), tag_handlers = ip)      # 192.0.2.0/24
+#> [1] "192.0.2.0/24"
+cbor_decode(hex("d8 36 50 20 01 0d b8 12 34 de ed be ef ca fe fa ce fe ed"), tag_handlers = ip)
+#> [1] "2001:db8:1234:deed:beef:cafe:face:feed"
+```
+
+### Decimal fractions (tag 4)
+
+Tag 4 is `[exponent, mantissa]`, the value mantissa × 10^exponent, so
+273.15 is `[-2, 27315]` exactly. The
+[decimal](https://pedrobtz.github.io/decimal/) package holds such
+numbers exactly in R, and stores each as its text, which makes both
+directions a few lines of string handling. The mantissa may be wider
+than 2^53;
+[`cbor_bigint()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)
+writes it exactly either way.
+
+``` r
+
+as_cbor.decimal <- function(x, ...) {
+  one <- function(s) {
+    m <- regmatches(s, regexec("^(-?)([0-9]*)[.]?([0-9]*)(?:[eE]([-+]?[0-9]+))?$", s, perl = TRUE))[[1]]
+    if (length(m) == 0L) stop("no CBOR form for decimal ", s)
+    digits <- sub("^0+(?=.)", "", paste0(m[3], m[4]), perl = TRUE)
+    exponent <- (if (nzchar(m[5])) as.integer(m[5]) else 0L) - nchar(m[4])
+    cbor_tag(4, list(exponent, cbor_bigint(paste0(if (digits != "0") m[2], digits))))
+  }
+  s <- as.character(x)
+  if (length(s) == 1L) one(s) else lapply(s, one)
+}
+decimal_from_tag <- function(v) {
+  digits <- if (inherits(v, "cbor_bigint")) as.character(v) else sprintf("%.0f", as.numeric(v))
+  decimal::decimal(paste0(digits[2], "E", digits[1]))
+}
+
+price <- decimal::decimal("273.15")
+bytes <- cbor_encode(price)
+bytes
+cbor_diagnose(bytes)
+cbor_decode(bytes, tag_handlers = list("4" = decimal_from_tag))
+```
+
+### Errors in handlers
+
+Validity of the CBOR is zucbor’s to check; what the content means is the
+handler’s. A handler that fails, as `uuid_from_bytes()` does on two
+bytes, raises `zucbor_handler_error`, which carries the tag number and
+the handler’s own error:
+
+``` r
+
+e <- tryCatch(
+  cbor_decode(hex("d8 25 42 01 02"), tag_handlers = list("37" = uuid_from_bytes)),
+  zucbor_handler_error = function(e) e
+)
+e$tag
+#> [1] 37
+conditionMessage(e$parent)
+#> [1] "a UUID is 16 bytes"
+```
+
 ## CBOR inside CBOR
 
 COSE and CWT carry CBOR inside byte strings, and tag 24 marks embedded
@@ -192,6 +329,21 @@ cbor_decode_seq(inner)
 #> 
 #> [[2]]
 #> [1] 0
+```
+
+When the embedded item is meant to be decoded, a handler for tag 24 does
+it in place. It is still an explicit call, so it can set limits of its
+own:
+
+``` r
+
+cbor_decode(hex("d8 18 44 82 01 61 61"),
+            tag_handlers = list("24" = function(b) cbor_decode(b, max_depth = 4)))
+#> [[1]]
+#> [1] 1
+#> 
+#> [[2]]
+#> [1] "a"
 ```
 
 ## Telemetry as a data frame

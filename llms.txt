@@ -143,6 +143,15 @@ zucbor is one of the `zu*` packages, with
   [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
   : Encode R values as CBOR
 
+## Tags and classes of your own
+
+- [`as_cbor()`](https://pedrobtz.github.io/zucbor/reference/as_cbor.md)
+  :
+
+  Teach
+  [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  a class
+
 ## Values without an R type
 
 - [`cbor_map()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)

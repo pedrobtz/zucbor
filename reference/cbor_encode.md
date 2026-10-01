@@ -64,9 +64,11 @@ A raw vector.
 
 A length-one atomic vector is a single value, not an array, unless it is
 wrapped in [`I()`](https://rdrr.io/r/base/AsIs.html) or
-`auto_unbox = FALSE`. A matrix is a flat array in column-major order. A
-vector whose class zucbor does not know is written as its underlying
-type.
+`auto_unbox = FALSE`. A matrix is a flat array in column-major order. An
+object whose class zucbor does not know goes through
+[`as_cbor()`](https://pedrobtz.github.io/zucbor/reference/as_cbor.md)
+first, so a method can say how to write it; without one it is written as
+its underlying type.
 
 Whole doubles become integers because R has no integer literal: `-7`
 written in R is a double, and as a CBOR float it would be a different
@@ -91,6 +93,7 @@ payloads are not kept; and fractional days of a `Date` are dropped.
 ## See also
 
 [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md),
+[`as_cbor()`](https://pedrobtz.github.io/zucbor/reference/as_cbor.md),
 [cbor-values](https://pedrobtz.github.io/zucbor/reference/cbor-values.md).
 
 ## Examples

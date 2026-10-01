@@ -46,6 +46,13 @@ class below inherits from `zucbor_error`.
   was given an R value with no CBOR form, such as a function, an
   environment, `POSIXlt` or a data frame.
 
+- `zucbor_handler_error`:
+
+  A function in
+  [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)'s
+  `tag_handlers` raised an error. The condition carries `tag`, the tag
+  number, and `parent`, the error the handler raised.
+
 - `zucbor_limit_error`:
 
   A limit was reached. The subclasses `zucbor_depth_limit`,

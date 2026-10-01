@@ -20,7 +20,8 @@ cbor_decode(
   deterministic = FALSE,
   max_depth = 256L,
   max_size = 64 * 1024^2,
-  max_items = 1e+06
+  max_items = 1e+06,
+  tag_handlers = NULL
 )
 
 cbor_decode_seq(
@@ -33,7 +34,8 @@ cbor_decode_seq(
   deterministic = FALSE,
   max_depth = 256L,
   max_size = 64 * 1024^2,
-  max_items = 1e+06
+  max_items = 1e+06,
+  tag_handlers = NULL
 )
 ```
 
@@ -92,6 +94,11 @@ cbor_decode_seq(
   Most data items allowed, counting every tag and every chunk of an
   indefinite-length string, or `Inf`.
 
+- tag_handlers:
+
+  `NULL`, or a list of functions of one argument, named by tag number,
+  such as `list("37" = function(value) ...)`. See "Tag handlers".
+
 ## Value
 
 The decoded value; for `cbor_decode_seq()`, a list with one element per
@@ -136,9 +143,33 @@ from the lossy conversions listed in
 
 `null` and `undefined` both decode as missing: R has one missing value.
 
+## Tag handlers
+
+`tag_handlers` gives meaning to tags zucbor does not convert, or
+replaces a conversion it does make. Each handler is called with the
+tag's content, decoded with the same options, and its result takes the
+tag's place:
+
+    cbor_decode(x, tag_handlers = list(
+      "37" = function(value) my_uuid(value),            # RFC 9562 UUID
+      "0"  = function(value) value                      # keep the text
+    ))
+
+A handler runs only once the whole input has been checked, so it never
+sees bytes that are malformed, invalid or over a limit. Its result never
+joins an array's simplification: an array holding one is a list. A
+handler applies whatever `tags` says, and a tag without one follows
+`tags`. An error in a handler becomes `zucbor_handler_error`, with the
+tag number as `tag` and the original condition as `parent`. A handler
+that calls `cbor_decode()` again, for CBOR embedded in a byte string,
+passes that call its own limits.
+[`as_cbor()`](https://pedrobtz.github.io/zucbor/reference/as_cbor.md) is
+the encoding half.
+
 ## See also
 
 [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md),
+[`as_cbor()`](https://pedrobtz.github.io/zucbor/reference/as_cbor.md),
 [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md),
 [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md),
 [cbor-values](https://pedrobtz.github.io/zucbor/reference/cbor-values.md),

@@ -20,6 +20,14 @@
   write RFC 8949 core deterministic encoding: identical R objects give
   identical bytes on every platform, and decoding then re-encoding
   deterministic input reproduces it exactly.
+- `tag_handlers =` in the decoders gives meaning to any tag: a function
+  per tag number turns its decoded content into an R value. Handlers run
+  only after the whole input has been checked, and an error in one is
+  `zucbor_handler_error`.
+  [`as_cbor()`](https://pedrobtz.github.io/zucbor/reference/as_cbor.md)
+  is the encoding half: an S3 generic that
+  [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  calls for any class it does not know.
 - [`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md)
   runs the check alone;
   [`cbor_diagnose()`](https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.md)

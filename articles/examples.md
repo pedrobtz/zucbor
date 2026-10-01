@@ -46,6 +46,48 @@ tryCatch(cbor_validate(bad, error = TRUE),
 #> "zucbor_parse_error"                 "11"
 ```
 
+## Where each byte goes
+
+A signature covers bytes, so reviewing a signed message sometimes means
+reading it byte by byte.
+[`cbor_annotate()`](https://pedrobtz.github.io/zucbor/reference/cbor_annotate.md)
+prints one line per head, with its offset, its bytes and what it is.
+This is a COSE_Sign1 message from the COSE working group’s examples
+(`sign1-tests/sign-pass-01.json`):
+
+``` r
+
+sign1 <- hex(paste0(
+  "d28441a0a201260442313154546869732069732074686520636f6e74656e742e5840",
+  "87db0d2e5571843b78ac33ecb2830df7b6e0a4d5b7376de336b23c591c90c425317e",
+  "56127fbe04370097ce347087b233bf722b64072beb4486bda4031d27244f"))
+cbor_annotate(sign1)
+#>  0  d2                                                     # tag(18)
+#>  1    84                                                   # array(4)
+#>  2      41                                                 # bytes(1)
+#>  3        a0                                               # h'a0'
+#>  4      a2                                                 # map(2)
+#>  5        01                                               # unsigned(1)
+#>  6        26                                               # negative(-7)
+#>  7        04                                               # unsigned(4)
+#>  8        42                                               # bytes(2)
+#>  9          31 31                                          # h'3131'
+#> 11      54                                                 # bytes(20)
+#> 12        54 68 69 73 20 69 73 20 74 68 65 20 63 6f 6e 74  # h'546869732069732074686520636f6e74656e742e'
+#> 28        65 6e 74 2e
+#> 32      58 40                                              # bytes(64)
+#> 34        87 db 0d 2e 55 71 84 3b 78 ac 33 ec b2 83 0d f7  # h'87db0d2e5571843b78ac33ecb2830df7b6e0a4d5b7376de336b23c591c90c425'...
+#> 50        b6 e0 a4 d5 b7 37 6d e3 36 b2 3c 59 1c 90 c4 25
+#> 66        31 7e 56 12 7f be 04 37 00 97 ce 34 70 87 b2 33
+#> 82        bf 72 2b 64 07 2b eb 44 86 bd a4 03 1d 27 24 4f
+```
+
+Tag 18 marks a COSE_Sign1. Its four parts are the protected header, a
+byte string holding the encoded map
+[`{}`](https://rdrr.io/r/base/Paren.html) (`a0`); the unprotected
+header, the algorithm (1: -7, ES256) and a key ID (4: `"11"`); the
+payload; and the 64-byte signature, in rows of 16.
+
 ## Maps with integer keys
 
 Protocols built on CBOR save space by using small integers as map keys.

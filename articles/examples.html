@@ -106,12 +106,50 @@ It checks the input first, so it is safe on anything:</p>
 <span><span class="co">#&gt; "zucbor_parse_error"                 "11"</span></span></code></pre></div>
 </div>
 <div class="section level2">
+<h2 id="where-each-byte-goes">Where each byte goes<a class="anchor" aria-label="anchor" href="#where-each-byte-goes"></a>
+</h2>
+<p>A signature covers bytes, so reviewing a signed message sometimes
+means reading it byte by byte. <code><a href="../reference/cbor_annotate.html">cbor_annotate()</a></code> prints one
+line per head, with its offset, its bytes and what it is. This is a
+COSE_Sign1 message from the COSE working group’s examples
+(<code>sign1-tests/sign-pass-01.json</code>):</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">sign1</span> <span class="op">&lt;-</span> <span class="fu">hex</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
+<span>  <span class="st">"d28441a0a201260442313154546869732069732074686520636f6e74656e742e5840"</span>,</span>
+<span>  <span class="st">"87db0d2e5571843b78ac33ecb2830df7b6e0a4d5b7376de336b23c591c90c425317e"</span>,</span>
+<span>  <span class="st">"56127fbe04370097ce347087b233bf722b64072beb4486bda4031d27244f"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/cbor_annotate.html">cbor_annotate</a></span><span class="op">(</span><span class="va">sign1</span><span class="op">)</span></span>
+<span><span class="co">#&gt;  0  d2                                                     # tag(18)</span></span>
+<span><span class="co">#&gt;  1    84                                                   # array(4)</span></span>
+<span><span class="co">#&gt;  2      41                                                 # bytes(1)</span></span>
+<span><span class="co">#&gt;  3        a0                                               # h'a0'</span></span>
+<span><span class="co">#&gt;  4      a2                                                 # map(2)</span></span>
+<span><span class="co">#&gt;  5        01                                               # unsigned(1)</span></span>
+<span><span class="co">#&gt;  6        26                                               # negative(-7)</span></span>
+<span><span class="co">#&gt;  7        04                                               # unsigned(4)</span></span>
+<span><span class="co">#&gt;  8        42                                               # bytes(2)</span></span>
+<span><span class="co">#&gt;  9          31 31                                          # h'3131'</span></span>
+<span><span class="co">#&gt; 11      54                                                 # bytes(20)</span></span>
+<span><span class="co">#&gt; 12        54 68 69 73 20 69 73 20 74 68 65 20 63 6f 6e 74  # h'546869732069732074686520636f6e74656e742e'</span></span>
+<span><span class="co">#&gt; 28        65 6e 74 2e</span></span>
+<span><span class="co">#&gt; 32      58 40                                              # bytes(64)</span></span>
+<span><span class="co">#&gt; 34        87 db 0d 2e 55 71 84 3b 78 ac 33 ec b2 83 0d f7  # h'87db0d2e5571843b78ac33ecb2830df7b6e0a4d5b7376de336b23c591c90c425'...</span></span>
+<span><span class="co">#&gt; 50        b6 e0 a4 d5 b7 37 6d e3 36 b2 3c 59 1c 90 c4 25</span></span>
+<span><span class="co">#&gt; 66        31 7e 56 12 7f be 04 37 00 97 ce 34 70 87 b2 33</span></span>
+<span><span class="co">#&gt; 82        bf 72 2b 64 07 2b eb 44 86 bd a4 03 1d 27 24 4f</span></span></code></pre></div>
+<p>Tag 18 marks a COSE_Sign1. Its four parts are the protected header, a
+byte string holding the encoded map <code><a href="https://rdrr.io/r/base/Paren.html" class="external-link">{}</a></code> (<code>a0</code>);
+the unprotected header, the algorithm (1: -7, ES256) and a key ID (4:
+<code>"11"</code>); the payload; and the 64-byte signature, in rows of
+16.</p>
+</div>
+<div class="section level2">
 <h2 id="maps-with-integer-keys">Maps with integer keys<a class="anchor" aria-label="anchor" href="#maps-with-integer-keys"></a>
 </h2>
 <p>Protocols built on CBOR save space by using small integers as map
 keys. Such a map decodes to a <code>cbor_map</code>, which keeps the
 keys as they are. A small helper looks values up by key:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cose_key</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
 <span>  <span class="st">"a5 01 02 03 26 20 01"</span>,</span>
 <span>  <span class="st">"21 58 20 65eda5a12577c2bae829437fe338701a10aaa375e1bb5b5de108de439c08551d"</span>,</span>
@@ -144,13 +182,13 @@ keys as they are. A small helper looks values up by key:</p>
 non-text keys into their diagnostic notation. It is handy for exploring,
 but lossy: <code>1</code> and <code>"1"</code> would collide, and zucbor
 refuses that rather than drop one.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="st">"a3 01 02 03 26 20 01"</span><span class="op">)</span>, map_keys <span class="op">=</span> <span class="st">"string"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "1"  "3"  "-1"</span></span></code></pre></div>
 <p>To write such a map, build it with <code><a href="../reference/cbor-values.html">cbor_map()</a></code>. Whole
 numbers are written as integers even when R holds them as doubles, as
 the protocol needs:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">hdr</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor-values.html">cbor_map</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fl">1L</span>, <span class="fl">4L</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">-</span><span class="fl">7</span>, <span class="fu"><a href="https://rdrr.io/r/base/rawConversion.html" class="external-link">charToRaw</a></span><span class="op">(</span><span class="st">"key-1"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/cbor_diagnose.html">cbor_diagnose</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="va">hdr</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "{1: -7, 4: h'6b65792d31'}"</span></span></code></pre></div>
@@ -161,7 +199,7 @@ the protocol needs:</p>
 <p>A double holds integers exactly only up to 2^53. Wider ones, such as
 64-bit identifiers or nanosecond timestamps, decode to
 <code>cbor_bigint</code>, which keeps every digit:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">id</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="st">"1b 16 f8 44 1f 3b 6f 00 01"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">id</span></span>
 <span><span class="co">#&gt; &lt;cbor_bigint[1]&gt;</span></span>
@@ -180,7 +218,7 @@ the protocol needs:</p>
 tags 100 and 1004 are calendar days and decode to <code>Date</code>.
 <code>POSIXct</code> is written back as tag 1, <code>Date</code> as tag
 1004:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="st">"c0 74 32 30 31 33 2d 30 33 2d 32 31 54 32 30 3a 30 34 3a 30 30 5a"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "2013-03-21 20:04:00 UTC"</span></span>
 <span><span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="st">"c1 1a 51 4b 67 b0"</span><span class="op">)</span><span class="op">)</span></span>
@@ -190,7 +228,7 @@ tags 100 and 1004 are calendar days and decode to <code>Date</code>.
 <span><span class="co">#&gt; [1] "{\"day\": 1004(\"2026-09-30\"), \"seen\": 1(1790769600)}"</span></span></code></pre></div>
 <p>Other tags come back as <code>cbor_tag</code>, with the number and
 the content:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">uri</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="st">"d8 20 76 68 74 74 70 3a 2f 2f 77 77 77 2e 65 78 61 6d 70 6c 65 2e 63 6f 6d"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">uri</span><span class="op">$</span><span class="va">tag</span></span>
 <span><span class="co">#&gt; [1] 32</span></span>
@@ -212,7 +250,7 @@ bytes.</p>
 </h3>
 <p>RFC 9562 UUIDs travel as tag 37 around their 16 bytes. Here they
 become a small class holding the usual text form:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">uuid</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">text</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/structure.html" class="external-link">structure</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="va">text</span><span class="op">)</span>, class <span class="op">=</span> <span class="st">"uuid"</span><span class="op">)</span></span>
 <span><span class="va">format.uuid</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">...</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span></span>
 <span><span class="va">print.uuid</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">...</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"&lt;uuid "</span>, <span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span>, <span class="st">"&gt;"</span><span class="op">)</span>, quote <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
@@ -252,7 +290,7 @@ package registers it instead, with
 address as tag 54 around 16, and a prefix as an array of its length and
 the address bytes with trailing zero bytes left out. Decoding them to
 text takes two handlers:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ip_text</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">v</span>, <span class="va">width</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">prefix</span> <span class="op">&lt;-</span> <span class="cn">NULL</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">is.list</a></span><span class="op">(</span><span class="va">v</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span>                              <span class="co"># [length, bytes]: a prefix</span></span>
@@ -284,7 +322,7 @@ text takes two handlers:</p>
 such numbers exactly in R, and stores each as its text, which makes both
 directions a few lines of string handling. The mantissa may be wider
 than 2^53; <code><a href="../reference/cbor-values.html">cbor_bigint()</a></code> writes it exactly either way.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">as_cbor.decimal</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">one</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">s</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/regmatches.html" class="external-link">regmatches</a></span><span class="op">(</span><span class="va">s</span>, <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">regexec</a></span><span class="op">(</span><span class="st">"^(-?)([0-9]*)[.]?([0-9]*)(?:[eE]([-+]?[0-9]+))?$"</span>, <span class="va">s</span>, perl <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
@@ -314,7 +352,7 @@ than 2^53; <code><a href="../reference/cbor-values.html">cbor_bigint()</a></code
 the handler’s. A handler that fails, as <code>uuid_from_bytes()</code>
 does on two bytes, raises <code>zucbor_handler_error</code>, which
 carries the tag number and the handler’s own error:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">e</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="st">"d8 25 42 01 02"</span><span class="op">)</span>, tag_handlers <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"37"</span> <span class="op">=</span> <span class="va">uuid_from_bytes</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  zucbor_handler_error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="va">e</span></span>
@@ -331,7 +369,7 @@ carries the tag number and the handler’s own error:</p>
 <p>COSE and CWT carry CBOR inside byte strings, and tag 24 marks
 embedded CBOR. zucbor never decodes those on its own; decoding them is
 one explicit call, with its own checks and limits:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">outer</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="st">"d8 18 45 82 01 61 61 00"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">outer</span></span>
 <span><span class="co">#&gt; &lt;cbor_tag 24&gt;</span></span>
@@ -341,7 +379,7 @@ byte, so <code><a href="../reference/cbor_decode.html">cbor_decode()</a></code> 
 <code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code> reads both items, and
 <code><a href="../reference/cbor_decode_prefix.html">cbor_decode_prefix()</a></code> reads the first and says where it
 ended:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">inner</span> <span class="op">&lt;-</span> <span class="fu">hex</span><span class="op">(</span><span class="st">"82 01 61 61 00"</span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="va">inner</span><span class="op">)</span>, zucbor_error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">class</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "zucbor_parse_error"</span></span>
@@ -361,7 +399,7 @@ ended:</p>
 <p>When the embedded item is meant to be decoded, a handler for tag 24
 does it in place. It is still an explicit call, so it can set limits of
 its own:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="st">"d8 18 44 82 01 61 61"</span><span class="op">)</span>,</span>
 <span>            tag_handlers <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"24"</span> <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">b</span><span class="op">)</span> <span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="va">b</span>, max_depth <span class="op">=</span> <span class="fl">4</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [[1]]</span></span>
@@ -376,7 +414,7 @@ its own:</p>
 <p>Sensors often send records one after another as an RFC 8742 sequence.
 Records with the same text keys become named lists, and a data frame is
 one step away:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">readings</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>sensor <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"t"</span>, <span class="va">i</span> <span class="op"><a href="https://rdrr.io/r/base/Arithmetic.html" class="external-link">%%</a></span> <span class="fl">2</span><span class="op">)</span>, c <span class="op">=</span> <span class="fl">20</span> <span class="op">+</span> <span class="va">i</span> <span class="op">/</span> <span class="fl">4</span>, ok <span class="op">=</span> <span class="va">i</span> <span class="op">!=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">stream</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_encode.html">cbor_encode_seq</a></span><span class="op">(</span><span class="va">readings</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">stream</span><span class="op">)</span></span>
@@ -402,7 +440,7 @@ columns by name when order matters.</p>
 <p>RFC 8746 writes a numeric vector as one byte string instead of one
 item per element. zucbor always decodes such typed arrays, and writes
 them when asked, along with matrices as tag 1040:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.5</span>, <span class="cn">NA</span>, <span class="op">-</span><span class="fl">0</span>, <span class="cn">Inf</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="va">bytes</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="va">m</span>, typed_arrays <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/cbor_diagnose.html">cbor_diagnose</a></span><span class="op">(</span><span class="va">bytes</span><span class="op">)</span></span>
@@ -411,7 +449,7 @@ them when asked, along with matrices as tag 1040:</p>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
 <p>Every bit survives, <code>NA</code> and <code>-0</code> included. For
 large data it is smaller and much faster in both directions:</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">1e5</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>array <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span>, typed <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="va">x</span>, typed_arrays <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;  array  typed </span></span>
@@ -425,7 +463,7 @@ large data it is smaller and much faster in both directions:</p>
 <p><code><a href="../reference/cbor_read.html">cbor_read()</a></code> reads a file, a URL or a connection, and
 never reads more than <code>max_size + 1</code> bytes, so a huge or
 endless source fails quickly:</p>
-<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".cbor"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/readBin.html" class="external-link">writeBin</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>version <span class="op">=</span> <span class="fl">2L</span>, tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>, <span class="va">path</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/cbor_read.html">cbor_read</a></span><span class="op">(</span><span class="va">path</span><span class="op">)</span>     <span class="co"># keys in encoded order: "tags" is shorter than "version"</span></span>
@@ -440,7 +478,7 @@ endless source fails quickly:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">path</span><span class="op">)</span></span></code></pre></div>
 <p>An open connection is read from its current position and left open,
 so a header can be read by hand first:</p>
-<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">con</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/rawConnection.html" class="external-link">rawConnection</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rawConversion.html" class="external-link">charToRaw</a></span><span class="op">(</span><span class="st">"CBOR"</span><span class="op">)</span>, <span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/readBin.html" class="external-link">readBin</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"raw"</span>, n <span class="op">=</span> <span class="fl">4</span><span class="op">)</span>        <span class="co"># a 4-byte header, say</span></span>
 <span><span class="co">#&gt; [1] 43 42 4f 52</span></span>
@@ -453,7 +491,7 @@ so a header can be read by hand first:</p>
 </h2>
 <p>The defaults suit messages from a network peer. Tighten them for
 small, known messages, or loosen them for large trusted files:</p>
-<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">nested</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/raw.html" class="external-link">as.raw</a></span><span class="op">(</span><span class="fl">0x81</span><span class="op">)</span>, <span class="fl">20</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/raw.html" class="external-link">as.raw</a></span><span class="op">(</span><span class="fl">0x00</span><span class="op">)</span><span class="op">)</span>    <span class="co"># 20 nested arrays</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="va">nested</span>, max_depth <span class="op">=</span> <span class="fl">8</span><span class="op">)</span>, zucbor_limit_error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">conditionMessage</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "CBOR nested deeper than max_depth = 8 at byte 8"</span></span>
@@ -465,7 +503,7 @@ small, known messages, or loosen them for large trusted files:</p>
 <span><span class="co">#&gt; [1] 5000</span></span></code></pre></div>
 <p>Duplicate map keys are refused by default, compared by value, so a
 key written twice in different lengths is still caught:</p>
-<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">dup</span> <span class="op">&lt;-</span> <span class="fu">hex</span><span class="op">(</span><span class="st">"a2 01 00 18 01 00"</span><span class="op">)</span>      <span class="co"># {1: 0, 1: 0}, the second key two bytes long</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="va">dup</span><span class="op">)</span>, zucbor_duplicate_key <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">conditionMessage</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "duplicate map key at byte 3"</span></span></code></pre></div>
@@ -477,7 +515,7 @@ key written twice in different lengths is still caught:</p>
 a deterministic message and encoding it again gives exactly those bytes,
 so a signed structure can be taken apart, checked and rebuilt
 safely:</p>
-<div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">signed</span> <span class="op">&lt;-</span> <span class="fu">hex</span><span class="op">(</span><span class="st">"84 43 a1 01 26 a0 45 68 65 6c 6c 6f 40"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/cbor_validate.html">cbor_validate</a></span><span class="op">(</span><span class="va">signed</span>, deterministic <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
@@ -485,12 +523,12 @@ safely:</p>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
 <p>Order does not leak into the bytes: two lists with the same entries
 encode identically, whatever order they were built in.</p>
-<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>b <span class="op">=</span> <span class="fl">2</span>, a <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span>, <span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span>, b <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
 <p>A one-element array comes back marked with <code><a href="https://rdrr.io/r/base/AsIs.html" class="external-link">I()</a></code>, which is
 what keeps its brackets when it is encoded again:</p>
-<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">one</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="fu">hex</span><span class="op">(</span><span class="st">"a1 63 78 35 63 81 42 01 02"</span><span class="op">)</span><span class="op">)</span>    <span class="co"># {"x5c": [h'0102']}</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/str.html" class="external-link">str</a></span><span class="op">(</span><span class="va">one</span><span class="op">)</span></span>
 <span><span class="co">#&gt; List of 1</span></span>

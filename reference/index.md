@@ -14,6 +14,8 @@
   : Validate CBOR
 - [`cbor_diagnose()`](https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.md)
   : CBOR diagnostic notation
+- [`cbor_annotate()`](https://pedrobtz.github.io/zucbor/reference/cbor_annotate.md)
+  : Annotated hex dump of CBOR
 
 ## Encode
 

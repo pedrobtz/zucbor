@@ -12,6 +12,8 @@ check <- function(x, ...) {
   tryCatch(cbor_validate(x, ...), zucbor_error = function(e) FALSE)
   tryCatch(cbor_validate(x, sequence = TRUE, deterministic = TRUE, ...),
            zucbor_error = function(e) FALSE)
+  tryCatch(cbor_annotate(x, ...), zucbor_error = function(e) NULL)
+  tryCatch(cbor_annotate(x, sequence = TRUE, ...), zucbor_error = function(e) NULL)
   # The build phase, under every mapping option.
   tryCatch(cbor_decode(x, ...), zucbor_error = function(e) NULL)
   tryCatch(cbor_decode_seq(x, simplify = "none", map_keys = "string",

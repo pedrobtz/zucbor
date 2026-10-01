@@ -10,6 +10,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"zucbor_encode",       (DL_FUNC) &zucbor_encode,       4},
     {"zucbor_half_roundtrip", (DL_FUNC) &zucbor_half_roundtrip, 0},
     {"zucbor_diagnose",     (DL_FUNC) &zucbor_diagnose,     3},
+    {"zucbor_annotate",     (DL_FUNC) &zucbor_annotate,     3},
     {"zucbor_format_roundtrip", (DL_FUNC) &zucbor_format_roundtrip, 1},
     {NULL, NULL, 0}
 };

@@ -10,6 +10,8 @@
 * `cbor_encode()` and `cbor_encode_seq()` write RFC 8949 core deterministic
   encoding: identical R objects give identical bytes on every platform, and
   decoding then re-encoding deterministic input reproduces it exactly.
+* `cbor_annotate()` prints an annotated hex dump: each head with its offset,
+  bytes and meaning, for reviewing a signed message byte by byte.
 * `cbor_decode_prefix()` decodes the item a raw vector starts with and
   reports how many bytes it used, for CBOR inside binary framing such as
   WebAuthn `authData`. What follows the item is not read.

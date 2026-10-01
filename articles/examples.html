@@ -337,8 +337,10 @@ one explicit call, with its own checks and limits:</p>
 <span><span class="co">#&gt; &lt;cbor_tag 24&gt;</span></span>
 <span><span class="co">#&gt; [1] 82 01 61 61 00</span></span></code></pre></div>
 <p>That tagged byte string is five bytes of CBOR followed by one more
-byte, so <code><a href="../reference/cbor_decode.html">cbor_decode()</a></code> refuses it, while
-<code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code> reads both items:</p>
+byte, so <code><a href="../reference/cbor_decode.html">cbor_decode()</a></code> refuses it,
+<code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code> reads both items, and
+<code><a href="../reference/cbor_decode_prefix.html">cbor_decode_prefix()</a></code> reads the first and says where it
+ended:</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">inner</span> <span class="op">&lt;-</span> <span class="fu">hex</span><span class="op">(</span><span class="st">"82 01 61 61 00"</span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="va">inner</span><span class="op">)</span>, zucbor_error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">class</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span></span>
@@ -353,7 +355,9 @@ byte, so <code><a href="../reference/cbor_decode.html">cbor_decode()</a></code> 
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; [[2]]</span></span>
-<span><span class="co">#&gt; [1] 0</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 0</span></span>
+<span><span class="fu"><a href="../reference/cbor_decode_prefix.html">cbor_decode_prefix</a></span><span class="op">(</span><span class="va">inner</span><span class="op">)</span><span class="op">$</span><span class="va">consumed</span></span>
+<span><span class="co">#&gt; [1] 4</span></span></code></pre></div>
 <p>When the embedded item is meant to be decoded, a handler for tag 24
 does it in place. It is still an explicit call, so it can set limits of
 its own:</p>

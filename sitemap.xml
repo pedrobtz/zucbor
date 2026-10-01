@@ -13,6 +13,7 @@
 <url><loc>https://pedrobtz.github.io/zucbor/reference/as_cbor.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/reference/cbor-values.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/reference/cbor_decode.html</loc></url>
+<url><loc>https://pedrobtz.github.io/zucbor/reference/cbor_decode_prefix.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/reference/cbor_encode.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zucbor/reference/cbor_read.html</loc></url>

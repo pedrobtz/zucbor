@@ -309,9 +309,11 @@ outer
 That tagged byte string is five bytes of CBOR followed by one more byte,
 so
 [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
-refuses it, while
+refuses it,
 [`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
-reads both items:
+reads both items, and
+[`cbor_decode_prefix()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode_prefix.md)
+reads the first and says where it ended:
 
 ``` r
 
@@ -329,6 +331,8 @@ cbor_decode_seq(inner)
 #> 
 #> [[2]]
 #> [1] 0
+cbor_decode_prefix(inner)$consumed
+#> [1] 4
 ```
 
 When the embedded item is meant to be decoded, a handler for tag 24 does

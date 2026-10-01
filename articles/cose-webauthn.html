@@ -103,8 +103,9 @@ credential’s public key as a COSE_Key, which is CBOR again.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ad</span> <span class="op">&lt;-</span> <span class="va">ao</span><span class="op">$</span><span class="va">authData</span></span>
 <span><span class="va">id_len</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="va">ad</span><span class="op">[</span><span class="fl">54</span><span class="op">]</span><span class="op">)</span> <span class="op">*</span> <span class="fl">256L</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="va">ad</span><span class="op">[</span><span class="fl">55</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="va">key</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="va">ad</span><span class="op">[</span><span class="op">(</span><span class="fl">56</span> <span class="op">+</span> <span class="va">id_len</span><span class="op">)</span><span class="op">:</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">ad</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="va">key</span></span>
+<span><span class="va">rest</span> <span class="op">&lt;-</span> <span class="va">ad</span><span class="op">[</span><span class="op">-</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fl">55</span> <span class="op">+</span> <span class="va">id_len</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="va">key</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_decode_prefix.html">cbor_decode_prefix</a></span><span class="op">(</span><span class="va">rest</span><span class="op">)</span></span>
+<span><span class="va">key</span><span class="op">$</span><span class="va">value</span></span>
 <span><span class="co">#&gt; &lt;cbor_map: 5 entries&gt;</span></span>
 <span><span class="co">#&gt; [[1]]</span></span>
 <span><span class="co">#&gt; [1] 2</span></span>
@@ -118,17 +119,31 @@ credential’s public key as a COSE_Key, which is CBOR again.</p>
 <span><span class="co">#&gt; [[-3]]</span></span>
 <span><span class="co">#&gt;  [1] 93 0a 56 b8 7a 2f ca 66 33 4b 03 45 8a bf 87 97 17 c1 2c c6 8e d7 32 90 af</span></span>
 <span><span class="co">#&gt; [26] 2e 26 64 79 6b 92 20</span></span></code></pre></div>
-<p>A COSE_Key uses integer map keys, so it is a <code>cbor_map</code>.
-Key 1 is the key type (2, EC2), 3 the algorithm (-7, ES256), -1 the
-curve (1, P-256), and -2 and -3 the coordinates.
+<p><code><a href="../reference/cbor_decode_prefix.html">cbor_decode_prefix()</a></code> decodes the one item at the start
+of <code>rest</code> and says how many bytes it took, without reading
+past it. That matters here: the key’s length is not written anywhere,
+and what follows it, if anything, is up to the flags byte, not up to
+CBOR. A COSE_Key uses integer map keys, so it is a
+<code>cbor_map</code>. Key 1 is the key type (2, EC2), 3 the algorithm
+(-7, ES256), -1 the curve (1, P-256), and -2 and -3 the coordinates.
 <code><a href="../reference/cbor_diagnose.html">cbor_diagnose()</a></code> shows the same thing the way the
 specifications write it:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/cbor_diagnose.html">cbor_diagnose</a></span><span class="op">(</span><span class="va">ad</span><span class="op">[</span><span class="op">(</span><span class="fl">56</span> <span class="op">+</span> <span class="va">id_len</span><span class="op">)</span><span class="op">:</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">ad</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/cbor_diagnose.html">cbor_diagnose</a></span><span class="op">(</span><span class="va">rest</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">key</span><span class="op">$</span><span class="va">consumed</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "{1: 2, 3: -7, -1: 1, -2: h'afefa16f97ca9b2d23eb86ccb64098d20db90856062eb249c33a9b672f26df61', -3: h'930a56b87a2fca66334b03458abf879717c12cc68ed73290af2e2664796b9220'}"</span></span></code></pre></div>
-<p>If the authenticator had included extensions, they would follow the
-key as a second CBOR item; <code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code> reads
-both.</p>
+<p>Bit 7 of the flags byte (<code>ED</code>) says whether extensions
+follow the key, as one more CBOR map. Here it is clear, and nothing
+follows:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">flags</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="va">ad</span><span class="op">[</span><span class="fl">33</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/bitwise.html" class="external-link">bitwAnd</a></span><span class="op">(</span><span class="va">flags</span>, <span class="fl">0x80L</span><span class="op">)</span> <span class="op">!=</span> <span class="fl">0L</span>        <span class="co"># extensions?</span></span>
+<span><span class="co">#&gt; [1] FALSE</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">rest</span><span class="op">)</span> <span class="op">-</span> <span class="va">key</span><span class="op">$</span><span class="va">consumed</span>        <span class="co"># bytes after the key</span></span>
+<span><span class="co">#&gt; [1] 0</span></span></code></pre></div>
+<p>Had it been set,
+<code>cbor_decode(rest[-seq_len(key$consumed)])</code> would read them,
+and would refuse anything after the extensions, as the layout
+requires.</p>
 </div>
 <div class="section level2">
 <h2 id="re-encoding-what-was-signed">Re-encoding what was signed<a class="anchor" aria-label="anchor" href="#re-encoding-what-was-signed"></a>
@@ -137,7 +152,7 @@ both.</p>
 deterministic, and decoding then re-encoding deterministic input
 reproduces it exactly, so a structure can be taken apart, inspected and
 put back:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="va">ao</span><span class="op">)</span>, <span class="va">att</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
 <p>That holds because one-element arrays decode as <code><a href="https://rdrr.io/r/base/AsIs.html" class="external-link">I()</a></code>
@@ -151,7 +166,7 @@ deterministic form survives the round trip byte for byte.</p>
 </h2>
 <p>A CBOR Web Token is a COSE_Sign1 message, tag 18, whose payload is a
 map of claims. This is RFC 8392’s example:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cwt</span> <span class="op">&lt;-</span> <span class="fu">hex</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span>
 <span>  <span class="st">"d28443a10126a104524173796d6d657472696345434453413235365850a70175636f"</span>,</span>
 <span>  <span class="st">"61703a2f2f61732e6578616d706c652e636f6d02656572696b77037818636f61703a"</span>,</span>
@@ -171,7 +186,7 @@ map of claims. This is RFC 8392’s example:</p>
 <p>The protected header and the payload are byte strings holding more
 CBOR. Decoding them is explicit, so each gets the same checks and
 limits:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/cbor_decode.html">cbor_decode</a></span><span class="op">(</span><span class="va">msg</span><span class="op">$</span><span class="va">value</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>        <span class="co"># protected header: {1: -7}, ES256</span></span>
 <span><span class="co">#&gt; &lt;cbor_map: 1 entry&gt;</span></span>
 <span><span class="co">#&gt; [[1]]</span></span>
@@ -198,7 +213,7 @@ limits:</p>
 signature over its bytes. With zucbor that is one call, and the bytes
 are exactly the ones the signer produced, because the encoding is
 deterministic:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">to_be_signed</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cbor_encode.html">cbor_encode</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"Signature1"</span>, <span class="va">msg</span><span class="op">$</span><span class="va">value</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, <span class="fu"><a href="https://rdrr.io/r/base/raw.html" class="external-link">raw</a></span><span class="op">(</span><span class="op">)</span>, <span class="va">msg</span><span class="op">$</span><span class="va">value</span><span class="op">[[</span><span class="fl">3</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/cbor_diagnose.html">cbor_diagnose</a></span><span class="op">(</span><span class="va">to_be_signed</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "[\"Signature1\", h'a10126', h'', h'a70175636f61703a2f2f61732e6578616d706c652e636f6d02656572696b77037818636f61703a2f2f6c696768742e6578616d706c652e636f6d041a5612aeb0051a5610d9f0061a5610d9f007420b71']"</span></span></code></pre></div>

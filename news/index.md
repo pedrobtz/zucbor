@@ -20,6 +20,10 @@
   write RFC 8949 core deterministic encoding: identical R objects give
   identical bytes on every platform, and decoding then re-encoding
   deterministic input reproduces it exactly.
+- [`cbor_decode_prefix()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode_prefix.md)
+  decodes the item a raw vector starts with and reports how many bytes
+  it used, for CBOR inside binary framing such as WebAuthn `authData`.
+  What follows the item is not read.
 - `tag_handlers =` in the decoders gives meaning to any tag: a function
   per tag number turns its decoded content into an R value. Handlers run
   only after the whole input has been checked, and an error in one is

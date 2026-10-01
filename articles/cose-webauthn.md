@@ -43,8 +43,9 @@ public key as a COSE_Key, which is CBOR again.
 
 ad <- ao$authData
 id_len <- as.integer(ad[54]) * 256L + as.integer(ad[55])
-key <- cbor_decode(ad[(56 + id_len):length(ad)])
-key
+rest <- ad[-seq_len(55 + id_len)]
+key <- cbor_decode_prefix(rest)
+key$value
 #> <cbor_map: 5 entries>
 #> [[1]]
 #> [1] 2
@@ -60,22 +61,37 @@ key
 #> [26] 2e 26 64 79 6b 92 20
 ```
 
-A COSE_Key uses integer map keys, so it is a `cbor_map`. Key 1 is the
-key type (2, EC2), 3 the algorithm (-7, ES256), -1 the curve (1, P-256),
-and -2 and -3 the coordinates.
+[`cbor_decode_prefix()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode_prefix.md)
+decodes the one item at the start of `rest` and says how many bytes it
+took, without reading past it. That matters here: the key’s length is
+not written anywhere, and what follows it, if anything, is up to the
+flags byte, not up to CBOR. A COSE_Key uses integer map keys, so it is a
+`cbor_map`. Key 1 is the key type (2, EC2), 3 the algorithm (-7, ES256),
+-1 the curve (1, P-256), and -2 and -3 the coordinates.
 [`cbor_diagnose()`](https://pedrobtz.github.io/zucbor/reference/cbor_diagnose.md)
 shows the same thing the way the specifications write it:
 
 ``` r
 
-cbor_diagnose(ad[(56 + id_len):length(ad)])
+cbor_diagnose(rest[seq_len(key$consumed)])
 #> [1] "{1: 2, 3: -7, -1: 1, -2: h'afefa16f97ca9b2d23eb86ccb64098d20db90856062eb249c33a9b672f26df61', -3: h'930a56b87a2fca66334b03458abf879717c12cc68ed73290af2e2664796b9220'}"
 ```
 
-If the authenticator had included extensions, they would follow the key
-as a second CBOR item;
-[`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
-reads both.
+Bit 7 of the flags byte (`ED`) says whether extensions follow the key,
+as one more CBOR map. Here it is clear, and nothing follows:
+
+``` r
+
+flags <- as.integer(ad[33])
+bitwAnd(flags, 0x80L) != 0L        # extensions?
+#> [1] FALSE
+length(rest) - key$consumed        # bytes after the key
+#> [1] 0
+```
+
+Had it been set, `cbor_decode(rest[-seq_len(key$consumed)])` would read
+them, and would refuse anything after the extensions, as the layout
+requires.
 
 ## Re-encoding what was signed
 

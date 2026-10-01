@@ -129,6 +129,8 @@ zucbor is one of the `zu*` packages, with
 - [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
   [`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
   : Decode CBOR
+- [`cbor_decode_prefix()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode_prefix.md)
+  : Decode the CBOR item at the start of a raw vector
 - [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
   [`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
   : Read CBOR from a file or connection

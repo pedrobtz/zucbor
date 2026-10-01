@@ -501,6 +501,266 @@ SEXP zucbor_diagnose(SEXP x, SEXP opts, SEXP max_items)
     return out;
 }
 
+/* ---- annotated hex dump (Stage 13) --------------------------------------------- */
+
+/* cbor_annotate(): one line per head, and per 16 bytes of string content,
+ * each with its offset, its bytes in hex (indented by depth) and what they
+ * are. It runs only on input the check accepted, so it reads heads by hand:
+ * every length is known to fit the input and every nesting to be within
+ * max_depth. Every input byte lands in exactly one line's hex column, and
+ * each line costs a bounded number of characters (indentation stops
+ * growing at ZU_ANN_MAX_INDENT levels, previews at ZU_ANN_PREVIEW bytes),
+ * so the output is a constant multiple of the input at most. */
+
+#define ZU_ANN_ROW 16
+#define ZU_ANN_PREVIEW 32
+#define ZU_ANN_MAX_INDENT 16
+
+typedef struct {
+    size_t offset;
+    size_t hex_at, hex_len;
+    size_t desc_at, desc_len;
+} zu_ann_line;
+
+typedef struct {
+    const uint8_t *buf;
+    zu_text hex, desc;
+    zu_ann_line *lines;
+    size_t n, cap;
+} zu_ann;
+
+static size_t head_length(uint8_t ib)
+{
+    int ai = ib & 31;
+    return ai < 24 || ai == 31 ? 1 : ai == 24 ? 2 : ai == 25 ? 3 : ai == 26 ? 5 : 9;
+}
+
+static uint64_t head_value(const uint8_t *p)
+{
+    int ai = p[0] & 31;
+    if (ai < 24)
+        return (uint64_t) ai;
+    size_t n = head_length(p[0]) - 1;
+    uint64_t v = 0;
+    for (size_t i = 1; i <= n; i++)
+        v = (v << 8) | p[i];
+    return v;
+}
+
+/* Starts a line for the bytes [at, at + n): its hex, indented by depth. The
+ * description is written after it with emit*(&a->desc, ...). */
+static void ann_line(zu_ann *a, size_t at, size_t n, int depth)
+{
+    static const char hex[] = "0123456789abcdef";
+    if (a->n == a->cap) {
+        size_t cap = a->cap ? 2 * a->cap : 64;
+        zu_ann_line *lines = (zu_ann_line *) R_alloc(cap, sizeof(zu_ann_line));
+        if (a->n)
+            memcpy(lines, a->lines, a->n * sizeof(zu_ann_line));
+        a->lines = lines;
+        a->cap = cap;
+    }
+    if (a->n && a->n % 65536 == 0)
+        R_CheckUserInterrupt();
+    if (a->n)
+        a->lines[a->n - 1].desc_len = a->desc.len - a->lines[a->n - 1].desc_at;
+    zu_ann_line *l = &a->lines[a->n++];
+    l->offset = at;
+    l->hex_at = a->hex.len;
+    int indent = depth < ZU_ANN_MAX_INDENT ? depth : ZU_ANN_MAX_INDENT;
+    reserve(&a->hex, 2 * (size_t) indent + 3 * n);
+    for (int i = 0; i < 2 * indent; i++)
+        a->hex.buf[a->hex.len++] = ' ';
+    for (size_t i = 0; i < n; i++) {
+        if (i)
+            a->hex.buf[a->hex.len++] = ' ';
+        a->hex.buf[a->hex.len++] = hex[a->buf[at + i] >> 4];
+        a->hex.buf[a->hex.len++] = hex[a->buf[at + i] & 15];
+    }
+    a->hex.buf[a->hex.len] = '\0';
+    l->hex_len = a->hex.len - l->hex_at;
+    l->desc_at = a->desc.len;
+}
+
+/* A string's content, ZU_ANN_ROW bytes a line; the first line describes it,
+ * cut at ZU_ANN_PREVIEW bytes (at a character boundary for text). */
+static void ann_content(zu_ann *a, size_t at, size_t n, int text, int depth)
+{
+    for (size_t row = 0; row < n; row += ZU_ANN_ROW) {
+        ann_line(a, at + row, n - row < ZU_ANN_ROW ? n - row : ZU_ANN_ROW, depth);
+        if (row)
+            continue;
+        size_t show = n < ZU_ANN_PREVIEW ? n : ZU_ANN_PREVIEW;
+        if (text)
+            while (show < n && show > 0 && (a->buf[at + show] & 0xc0) == 0x80)
+                show--;
+        emit_chunk(&a->desc, text, a->buf + at, show);
+        if (show < n)
+            emits(&a->desc, "...");
+    }
+}
+
+static size_t ann_item(zu_ann *a, size_t pos, int depth)
+{
+    const uint8_t *p = a->buf + pos;
+    int major = p[0] >> 5, ai = p[0] & 31;
+    size_t hl = head_length(p[0]);
+    uint64_t v = head_value(p);
+    static const char *const kinds[] = {"unsigned", "negative", "bytes", "text", "array", "map", "tag"};
+    ann_line(a, pos, hl, depth);
+    pos += hl;
+    switch (major) {
+    case 0:
+    case 1:
+        emits(&a->desc, kinds[major]);
+        emits(&a->desc, "(");
+        if (major == 1) {
+            emits(&a->desc, "-");
+            if (v == UINT64_MAX)
+                emits(&a->desc, "18446744073709551616");
+            else
+                emit_uint(&a->desc, v + 1);
+        } else {
+            emit_uint(&a->desc, v);
+        }
+        emits(&a->desc, ")");
+        return pos;
+    case 2:
+    case 3:
+        emits(&a->desc, kinds[major]);
+        if (ai == 31) {
+            emits(&a->desc, "(*)");
+            while (a->buf[pos] != 0xff)
+                pos = ann_item(a, pos, depth + 1);
+            ann_line(a, pos, 1, depth);
+            emits(&a->desc, "break");
+            return pos + 1;
+        }
+        emits(&a->desc, "(");
+        emit_uint(&a->desc, v);
+        emits(&a->desc, ")");
+        ann_content(a, pos, (size_t) v, major == 3, depth + 1);
+        return pos + (size_t) v;
+    case 4:
+    case 5:
+        emits(&a->desc, kinds[major]);
+        if (ai == 31) {
+            emits(&a->desc, "(*)");
+            while (a->buf[pos] != 0xff)
+                pos = ann_item(a, pos, depth + 1);
+            ann_line(a, pos, 1, depth);
+            emits(&a->desc, "break");
+            return pos + 1;
+        }
+        emits(&a->desc, "(");
+        emit_uint(&a->desc, v);
+        emits(&a->desc, ")");
+        for (uint64_t i = 0; i < (major == 5 ? 2 * v : v); i++)
+            pos = ann_item(a, pos, depth + 1);
+        return pos;
+    case 6:
+        emits(&a->desc, "tag(");
+        emit_uint(&a->desc, v);
+        emits(&a->desc, ")");
+        return ann_item(a, pos, depth + 1);
+    default: {
+        double d;
+        const char *width = NULL;
+        if (ai == 25) {
+            d = zu_half_to_double((uint16_t) v);
+            width = "float16 ";
+        } else if (ai == 26) {
+            uint32_t u = (uint32_t) v;
+            float f;
+            memcpy(&f, &u, sizeof f);
+            d = f;
+            width = "float32 ";
+        } else if (ai == 27) {
+            memcpy(&d, &v, sizeof d);
+            width = "float64 ";
+        }
+        if (width) {
+            char num[40];
+            zu_format_double(d, num);
+            emits(&a->desc, width);
+            emits(&a->desc, num);
+        } else if (v == 20 || v == 21) {
+            emits(&a->desc, v == 21 ? "true" : "false");
+        } else if (v == 22 || v == 23) {
+            emits(&a->desc, v == 22 ? "null" : "undefined");
+        } else {
+            emits(&a->desc, "simple(");
+            emit_uint(&a->desc, v);
+            emits(&a->desc, ")");
+        }
+        return pos;
+    }
+    }
+}
+
+static SEXP ann_strings(const zu_text *t, const zu_ann_line *lines, size_t n, int hex)
+{
+    SEXP out = PROTECT(Rf_allocVector(STRSXP, (R_xlen_t) n));
+    for (size_t i = 0; i < n; i++) {
+        size_t at = hex ? lines[i].hex_at : lines[i].desc_at;
+        size_t len = hex ? lines[i].hex_len : lines[i].desc_len;
+        SET_STRING_ELT(out, (R_xlen_t) i, Rf_mkCharLenCE(t->buf + at, (int) len, CE_UTF8));
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+/* Returns list(fault, list(offset, hex, desc)), like zucbor_diagnose(). */
+SEXP zucbor_annotate(SEXP x, SEXP opts, SEXP max_items)
+{
+    if (TYPEOF(x) != RAWSXP || TYPEOF(opts) != INTSXP || XLENGTH(opts) != 4)
+        Rf_error("zucbor_annotate: arguments must be validated in R");
+    const int *o = INTEGER(opts);
+    zu_check_opts opt;
+    opt.sequence = o[0];
+    opt.deterministic = o[1];
+    opt.duplicate_keys = o[2];
+    opt.max_depth = o[3];
+    opt.prefix = 0;
+    double mi = Rf_asReal(max_items);
+    if (opt.max_depth < 1 || opt.max_depth > ZU_MAX_DEPTH_CAP || ISNAN(mi) || mi < 1)
+        Rf_error("zucbor_annotate: limits must be validated in R");
+    opt.max_items = R_FINITE(mi) ? (uint64_t) mi : UINT64_MAX;
+
+    const uint8_t *buf = RAW(x);
+    size_t len = (size_t) XLENGTH(x);
+    zu_plan plan;
+    zu_fault fault;
+    SEXP out = PROTECT(Rf_allocVector(VECSXP, 2));
+    if (zu_check(buf, len, &opt, &plan, &fault)) {
+        SET_VECTOR_ELT(out, 0, zu_fault_sexp(&fault));
+        UNPROTECT(1);
+        return out;
+    }
+    zu_ann a;
+    memset(&a, 0, sizeof a);
+    a.buf = buf;
+    reserve(&a.hex, 0);
+    reserve(&a.desc, 0);
+    size_t pos = 0;
+    while (pos < len)
+        pos = ann_item(&a, pos, 0);
+    if (a.n)
+        a.lines[a.n - 1].desc_len = a.desc.len - a.lines[a.n - 1].desc_at;
+
+    const char *names[] = {"offset", "hex", "desc", ""};
+    SEXP parts = PROTECT(Rf_mkNamed(VECSXP, names));
+    SEXP off = Rf_allocVector(REALSXP, (R_xlen_t) a.n);
+    SET_VECTOR_ELT(parts, 0, off);
+    for (size_t i = 0; i < a.n; i++)
+        REAL(off)[i] = (double) a.lines[i].offset;
+    SET_VECTOR_ELT(parts, 1, ann_strings(&a.hex, a.lines, a.n, 1));
+    SET_VECTOR_ELT(parts, 2, ann_strings(&a.desc, a.lines, a.n, 0));
+    SET_VECTOR_ELT(out, 1, parts);
+    UNPROTECT(2);
+    return out;
+}
+
 /* Test hook: does each double read back exactly from its diagnostic form?
  * Uses the C library's strtod(), which is correctly rounded everywhere; R's
  * own parser is not on every platform. */

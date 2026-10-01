@@ -19,7 +19,7 @@ The plan is written: [.agents/design.md](../.agents/design.md) is the specificat
 
 Stages 0–8 are done, and the next release is planned in [.agents/roadmap-0.2.0.md](../.agents/roadmap-0.2.0.md) (Stages 10–16, from a survey of Python's and Node's CBOR libraries). `main` carries `0.0.0.9000`, the never-released development version; Stage 9's remaining steps are a human's: set `Version: 0.1.0` and the `NEWS.md` heading, tag `v0.1.0`, submit to CRAN, answer reviewers. The roadmap's Stage 9 table maps each design §20 acceptance criterion to what verifies it.
 
-**API:** `cbor_decode()`/`cbor_decode_seq()`/`cbor_decode_prefix()`, `cbor_read()`/`cbor_read_seq()`, `cbor_validate()`, `cbor_diagnose()`, `cbor_encode()`/`cbor_encode_seq()`, the value classes `cbor_map()`, `cbor_tag()`, `cbor_simple()`, `cbor_bigint()`, the `as_cbor()` generic, and `zucbor_info()`. The decoders take `tag_handlers =` (design §6.6, §7.5). Work after 0.1.0 follows `.agents/roadmap-0.2.0.md`.
+**API:** `cbor_decode()`/`cbor_decode_seq()`/`cbor_decode_prefix()`, `cbor_read()`/`cbor_read_seq()`, `cbor_validate()`, `cbor_diagnose()`, `cbor_annotate()`, `cbor_encode()`/`cbor_encode_seq()`, the value classes `cbor_map()`, `cbor_tag()`, `cbor_simple()`, `cbor_bigint()`, the `as_cbor()` generic, and `zucbor_info()`. The decoders take `tag_handlers =` (design §6.6, §7.5). Work after 0.1.0 follows `.agents/roadmap-0.2.0.md`.
 
 **Architecture** (design §4):
 

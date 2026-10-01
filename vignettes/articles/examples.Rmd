@@ -40,6 +40,26 @@ tryCatch(cbor_validate(bad, error = TRUE),
          zucbor_error = function(e) c(class = class(e)[1], offset = e$offset))
 ```
 
+## Where each byte goes
+
+A signature covers bytes, so reviewing a signed message sometimes means
+reading it byte by byte. `cbor_annotate()` prints one line per head, with
+its offset, its bytes and what it is. This is a COSE_Sign1 message from the
+COSE working group's examples (`sign1-tests/sign-pass-01.json`):
+
+```{r}
+sign1 <- hex(paste0(
+  "d28441a0a201260442313154546869732069732074686520636f6e74656e742e5840",
+  "87db0d2e5571843b78ac33ecb2830df7b6e0a4d5b7376de336b23c591c90c425317e",
+  "56127fbe04370097ce347087b233bf722b64072beb4486bda4031d27244f"))
+cbor_annotate(sign1)
+```
+
+Tag 18 marks a COSE_Sign1. Its four parts are the protected header, a byte
+string holding the encoded map `{}` (`a0`); the unprotected header, the
+algorithm (1: -7, ES256) and a key ID (4: `"11"`); the payload; and the
+64-byte signature, in rows of 16.
+
 ## Maps with integer keys
 
 Protocols built on CBOR save space by using small integers as map keys.

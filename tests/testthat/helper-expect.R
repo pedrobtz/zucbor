@@ -89,3 +89,13 @@ typed_item <- function(tag, b) {
   head <- cbor_encode(cbor_tag(tag, raw()))          # the tag, then 0x40
   c(head[-length(head)], cbor_encode(b))
 }
+
+# The bytes in an annotation's hex column, in line order, and whether each
+# line's offset is where the bytes before it end.
+annotation_bytes <- function(a) {
+  parts <- regmatches(unclass(a), regexec("^ *([0-9]+)  +((?:[0-9a-f]{2} ?)*)", unclass(a), perl = TRUE))
+  offsets <- as.numeric(vapply(parts, `[`, "", 2L))
+  hex <- gsub(" ", "", vapply(parts, `[`, "", 3L))
+  starts <- cumsum(c(0, nchar(hex) / 2))[seq_along(hex)]
+  list(bytes = paste(hex, collapse = ""), offsets_ok = identical(offsets, starts))
+}

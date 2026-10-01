@@ -117,6 +117,7 @@ cbor_read(file, ...)         # path or connection -> R value
 cbor_read_seq(file, ...)     # path or connection -> list
 cbor_validate(x, sequence = FALSE, ..., error = FALSE)  # raw -> TRUE/FALSE; the check phase only
 cbor_diagnose(x, sequence = FALSE, ...)  # raw -> character(1), RFC 8949 §8 diagnostic notation
+cbor_annotate(x, sequence = FALSE, ...)  # raw -> cbor_annotation: annotated hex dump (Stage 13)
 
 # encode
 cbor_encode(x, ...)          # R value -> raw
@@ -134,11 +135,13 @@ as_cbor(x, ...)              # S3 generic cbor_encode() calls for a class it doe
 zucbor_info()                # TinyCBOR version, compiled limits, defaults
 ```
 
-Thirteen functions in 0.1.0, fifteen with `as_cbor()` and `cbor_decode_prefix()`, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
+Thirteen functions in 0.1.0, sixteen with `as_cbor()`, `cbor_decode_prefix()` and `cbor_annotate()`, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
 
 **Why `decode`/`encode`, not `parse`/`write`.** The siblings' verbs are for text formats. RFC 8949 speaks of encoders and decoders, and so do the protocols this package serves; a user reading COSE code in another language will look for those words.
 
 **`cbor_diagnose()`** checks the input exactly as `cbor_validate()` does, then prints RFC 8949 §8 diagnostic notation. The printer is project code (`src/zu_diag.c`), not TinyCBOR's `cborpretty.c`, which always marks a float's width (`1.5f16`, or `1.5_1`) and has no flag to leave it out. It matches RFC 8949 Appendix A's own column on 79 of 81 rows. The other two are bignums, whose *value* the table shows where the notation is the tag (`2(h'010000000000000000')`). Numbers print as JavaScript's `Number.prototype.toString()` does (shortest round-trip digits; fixed notation from 1e-7 to 1e21, else an exponent), with `.0` added to a float that would read as an integer. Text is ASCII with JSON escapes, `\u` for everything past it and surrogate pairs above U+FFFF, which is also what makes the output safe on a non-UTF-8 console. The same printer names non-text keys under `map_keys = "string"`. Decided at Stage 5.
+
+**`cbor_annotate()`** (Stage 13) checks the input as `cbor_diagnose()` does, then prints one line per head and per 16 bytes of string content: the 0-based decimal offset (as conditions report it), the bytes in hex indented by depth, and a description (`map(2)`, `negative(-501)`, `float16 1.5`, `tag(1)`, a string's first 32 bytes as diagnostic notation). Every input byte appears exactly once in the hex column, which the tests check over Appendix A and the whole COSE corpus. It is project code beside the diagnostic printer in `src/zu_diag.c`, sharing its number and string formatting; because the input is checked, it reads heads by hand rather than through TinyCBOR's iterator, which keeps chunk and break bytes in their own lines. Indentation stops at 16 levels and previews at 32 bytes, so each line is bounded and the output is a constant multiple of the input. C returns offsets, hex and descriptions; R aligns the columns. The result is a character vector of class `cbor_annotation` that prints as its lines.
 
 **Why there is no `cbor_write()`.** `writeBin(cbor_encode(x), path)` is the whole of it. `cbor_read()` exists because reading has to be bounded before the bytes reach memory (§11); writing has no such concern.
 

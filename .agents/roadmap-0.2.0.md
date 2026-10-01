@@ -134,7 +134,7 @@ A numeric vector of a million elements is a million CBOR items today. RFC 8746 w
 
 ## Stage 13 — Annotated hex dump · S
 
-**Status:** not started.
+**Status:** done, 2026-10-01 (#33). Design §5.
 
 `cbor_diagnose()` shows what a message means; reviewing a signed message also needs where each byte went. Node's `cbor2` has `comment()`, and the cbor.me playground prints the same thing.
 
@@ -146,6 +146,12 @@ A numeric vector of a million elements is a million CBOR items today. RFC 8746 w
 **Exit**
 - Every Appendix A example annotates, with each byte of the input appearing exactly once in the hex column, checked mechanically.
 - A COSE message from the conformance corpus reads correctly in the examples article.
+**What actually happened**
+
+- Long strings are not cut in the hex column, only in the preview: their content follows the head in rows of 16 bytes, so every byte appears exactly once for any input, not only for Appendix A, while the output stays bounded (indentation stops at 16 levels, previews at 32 bytes). The plan's "first bytes and a count" would have broken the exit criterion's own check on long strings.
+- The writer reads heads by hand instead of through TinyCBOR's iterator, since the input is already checked; that keeps every chunk head and `break` byte on its own line, which the iterator's string API hides.
+- Offsets are decimal and 0-based, as zucbor's conditions report them. C returns the three columns; R aligns them.
+- The check runs over Appendix A and every one of the COSE corpus's unique items. The examples article annotates `sign1-tests/sign-pass-01.json`.
 
 ---
 

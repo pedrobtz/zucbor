@@ -16,6 +16,7 @@ reference:
       - cbor_read
       - cbor_validate
       - cbor_diagnose
+      - cbor_annotate
   - title: Encode
     contents:
       - cbor_encode

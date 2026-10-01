@@ -37,6 +37,7 @@ SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers);
 SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call, SEXP ns);
 SEXP zucbor_half_roundtrip(void);
 SEXP zucbor_diagnose(SEXP x, SEXP opts, SEXP max_items);
+SEXP zucbor_annotate(SEXP x, SEXP opts, SEXP max_items);
 SEXP zucbor_format_roundtrip(SEXP x);
 
 #endif

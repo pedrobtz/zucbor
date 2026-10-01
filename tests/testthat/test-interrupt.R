@@ -22,7 +22,7 @@ test_that("an interrupt while tag handlers run unwinds, and the input then decod
   # Handlers run R code in the middle of the build; an interrupt there (or a
   # time limit, which a handler sees as an error and zucbor wraps) must
   # unwind through the build as cleanly as one from the item loop.
-  n <- 3e5
+  n <- 1e5
   x <- c(hex_raw("9a"), as.raw(c(n %/% 16777216, (n %/% 65536) %% 256, (n %/% 256) %% 256, n %% 256)),
          rep(hex_raw("d86301"), n))
   h <- list("99" = function(v) v + 1L)

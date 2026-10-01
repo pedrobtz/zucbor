@@ -83,3 +83,9 @@ local_as_cbor <- function(class, method, env = parent.frame()) {
   assign(name, method, envir = table)
   withr::defer(rm(list = name, envir = table), envir = env)
 }
+
+# The typed array tag `tag` (RFC 8746) around the bytes `b`.
+typed_item <- function(tag, b) {
+  head <- cbor_encode(cbor_tag(tag, raw()))          # the tag, then 0x40
+  c(head[-length(head)], cbor_encode(b))
+}

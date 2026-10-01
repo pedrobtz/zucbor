@@ -19,16 +19,18 @@ string that is not valid UTF-8.}
 early, uses a reserved encoding, has a misplaced "break", or has bytes
 after the item.}
 \item{\code{zucbor_invalid_error}}{The input is well-formed but not valid:
-a text string that is not UTF-8, or a tag whose content has the wrong
-type.}
+a text string that is not UTF-8, a tag whose content has the wrong
+type, a typed array whose length is not a whole number of elements,
+or a multi-dimensional array whose shape does not match its
+elements.}
 \item{\code{zucbor_deterministic_error}}{\code{deterministic = TRUE} and the input
 is not in RFC 8949 core deterministic encoding.}
 \item{\code{zucbor_duplicate_key}}{A map has the same key twice and
 \code{duplicate_keys = FALSE}.}
 \item{\code{zucbor_unrepresentable}}{The input is valid CBOR but holds a
 value R cannot: a text string containing U+0000 or longer than an R
-string, a tag number beyond 2^53, or an integer beyond 2^53 with
-\code{big_integers = "error"}.}
+string, a tag number beyond 2^53, an integer beyond 2^53 with
+\code{big_integers = "error"}, or an array dimension beyond R's limit.}
 \item{\code{zucbor_unsupported_type}}{\code{\link[=cbor_encode]{cbor_encode()}} was given an R value
 with no CBOR form, such as a function, an environment, \code{POSIXlt} or a
 data frame.}

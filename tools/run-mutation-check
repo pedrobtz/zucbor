@@ -30,6 +30,9 @@ bignum-preferred|c24101|0 1 0 256 1000|ZU_ERR_BIGNUM_NOT_PREFERRED
 tag-content|c16161|0 0 0 256 1000|CborErrorInappropriateTagForType
 trailing-bytes|0102|0 0 0 256 1000|CborErrorGarbageAtEnd
 utf8|61ff|0 0 0 256 1000|CborErrorInvalidUtf8TextString
+typed-array-length|d8564101|0 0 0 256 1000|ZU_ERR_TYPED_ARRAY
+array-parts|d904108281d86302820102|0 0 0 256 1000|ZU_ERR_ARRAY_SHAPE
+array-shape|d904108282010283010203|0 0 0 256 1000|ZU_ERR_ARRAY_SHAPE
 '
 # odd-map is defence in depth: TinyCBOR already refuses a break in a map's
 # value position, so no input reaches it and removing it cannot be observed.

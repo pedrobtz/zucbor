@@ -56,6 +56,9 @@ typedef struct {
 } zu_builder;
 
 static SEXP build(zu_builder *b, CborValue *it, int *kind);
+static SEXP as_is(SEXP x);
+static SEXP find_handler(const zu_builder *b, CborTag tag);
+static size_t next_count(zu_builder *b, const uint8_t *at);
 
 /* ---- faults ---------------------------------------------------------------- */
 
@@ -303,6 +306,234 @@ static SEXP bignum(zu_builder *b, CborTag tag, CborValue *it, int *kind, const u
     return out;
 }
 
+/* ---- typed and multi-dimensional arrays (RFC 8746, Stage 12) ------------------ */
+
+static uint64_t load_uint(const uint8_t *p, int size, int little)
+{
+    uint64_t v = 0;
+    for (int i = 0; i < size; i++)
+        v = (v << 8) | p[little ? size - 1 - i : i];
+    return v;
+}
+
+/* Two's complement of `bits` bits, without relying on how C converts an
+ * out-of-range unsigned value to a signed one. */
+static int64_t sign_extend(uint64_t v, int bits)
+{
+    if (bits < 64 && (v >> (bits - 1)) & 1)
+        return -(int64_t)((~v & ((UINT64_C(1) << bits) - 1)) + 1);
+    if (bits == 64 && (v >> 63))
+        return -(int64_t)(~v) - 1;
+    return (int64_t) v;
+}
+
+/* Tags 64-82 and 84-86 (not 76): one byte string, decoded to an atomic
+ * vector in one pass, byte by byte, so the platform's own byte order never
+ * matters. 8- and 16-bit integers and signed 32-bit become integer (the
+ * sint32 INT_MIN is R's NA_integer_, which is how cbor_encode() writes
+ * it); unsigned 32-bit and the 64-bit integers become double while every
+ * element is within 2^53, else follow big_integers, as single integers do
+ * (design section 6.2). Floats become double exactly, every bit kept. */
+static SEXP typed_array(zu_builder *b, CborTag tag, CborValue *it, int *kind, const uint8_t *at)
+{
+    SEXP bytes = PROTECT(read_bytes(b, it));
+    int size = zu_typed_size(tag);
+    int is_float = (tag & 16) != 0, is_signed = (tag & 8) != 0;
+    int little = size > 1 && (tag & 4) != 0;
+    R_xlen_t n = XLENGTH(bytes) / size;
+    const uint8_t *p = RAW(bytes);
+    SEXP out;
+    *kind = K_OTHER;
+
+    if (is_float) {
+        out = PROTECT(Rf_allocVector(REALSXP, n));
+        double *d = REAL(out);
+        for (R_xlen_t i = 0; i < n; i++) {
+            uint64_t v = load_uint(p + i * size, size, little);
+            if (size == 2) {
+                d[i] = zu_half_to_double((uint16_t) v);
+            } else if (size == 4) {
+                uint32_t u = (uint32_t) v;
+                float f;
+                memcpy(&f, &u, sizeof f);
+                d[i] = f;
+            } else {
+                memcpy(&d[i], &v, sizeof v);
+            }
+        }
+    } else if (size <= 2 || (size == 4 && is_signed)) {
+        out = PROTECT(Rf_allocVector(INTSXP, n));
+        int *v = INTEGER(out);
+        for (R_xlen_t i = 0; i < n; i++) {
+            uint64_t u = load_uint(p + i * size, size, little);
+            v[i] = (int)(is_signed ? sign_extend(u, 8 * size) : (int64_t) u);
+        }
+    } else {
+        const uint64_t two53 = UINT64_C(1) << 53;
+        int fits = 1;
+        for (R_xlen_t i = 0; i < n && fits; i++) {
+            uint64_t u = load_uint(p + i * size, size, little);
+            if (is_signed) {
+                int64_t s = sign_extend(u, 64);
+                fits = s >= -(int64_t) two53 && s <= (int64_t) two53;
+            } else {
+                fits = u <= two53;
+            }
+        }
+        if (!fits && b->big_integers == BIG_ERROR)
+            fail_build(b, ZU_ERR_BIG_INTEGER, "typed array element beyond 2^53 with big_integers = \"error\"", at);
+        if (fits || b->big_integers == BIG_DOUBLE) {
+            out = PROTECT(Rf_allocVector(REALSXP, n));
+            for (R_xlen_t i = 0; i < n; i++) {
+                uint64_t u = load_uint(p + i * size, size, little);
+                REAL(out)[i] = is_signed ? (double) sign_extend(u, 64) : (double) u;
+            }
+        } else {
+            out = PROTECT(Rf_allocVector(STRSXP, n));
+            for (R_xlen_t i = 0; i < n; i++) {
+                uint64_t u = load_uint(p + i * size, size, little);
+                char dec[24];
+                if (is_signed && (u >> 63)) {
+                    dec[0] = '-';
+                    zu_u64_to_dec(~u + 1, dec + 1);     /* the magnitude, 2^63 included */
+                } else {
+                    zu_u64_to_dec(u, dec);
+                }
+                SET_STRING_ELT(out, i, Rf_mkChar(dec));
+            }
+            Rf_setAttrib(out, R_ClassSymbol, Rf_mkString("cbor_bigint"));
+        }
+    }
+    out = as_is(out);
+    UNPROTECT(2);
+    return out;
+}
+
+/* x's class without the "AsIs" that as_is() put first. */
+static void strip_as_is(SEXP x)
+{
+    SEXP old = PROTECT(Rf_getAttrib(x, R_ClassSymbol));
+    if (TYPEOF(old) == STRSXP && XLENGTH(old) >= 1 && strcmp(CHAR(STRING_ELT(old, 0)), "AsIs") == 0) {
+        R_xlen_t n = XLENGTH(old) - 1;
+        if (n == 0) {
+            Rf_setAttrib(x, R_ClassSymbol, R_NilValue);
+        } else {
+            SEXP klass = PROTECT(Rf_allocVector(STRSXP, n));
+            for (R_xlen_t i = 0; i < n; i++)
+                SET_STRING_ELT(klass, i, STRING_ELT(old, i + 1));
+            Rf_setAttrib(x, R_ClassSymbol, klass);
+            UNPROTECT(1);
+        }
+    }
+    UNPROTECT(1);
+}
+
+/* el, read in row-major order, rewritten in R's column-major order. */
+static SEXP to_column_major(SEXP el, const int *dim, int nd)
+{
+    R_xlen_t n = XLENGTH(el);
+    SEXP out = PROTECT(Rf_allocVector(TYPEOF(el), n));
+    DUPLICATE_ATTRIB(out, el);
+    R_xlen_t *idx = (R_xlen_t *) R_alloc((size_t) nd, sizeof(R_xlen_t));
+    R_xlen_t *stride = (R_xlen_t *) R_alloc((size_t) nd, sizeof(R_xlen_t));
+    for (int k = 0; k < nd; k++) {
+        idx[k] = 0;
+        stride[k] = k ? stride[k - 1] * dim[k - 1] : 1;
+    }
+    R_xlen_t c = 0;
+    for (R_xlen_t r = 0; r < n; r++) {
+        switch (TYPEOF(el)) {
+        case LGLSXP: LOGICAL(out)[c] = LOGICAL(el)[r]; break;
+        case INTSXP: INTEGER(out)[c] = INTEGER(el)[r]; break;
+        case REALSXP: REAL(out)[c] = REAL(el)[r]; break;
+        case STRSXP: SET_STRING_ELT(out, c, STRING_ELT(el, r)); break;
+        case VECSXP: SET_VECTOR_ELT(out, c, VECTOR_ELT(el, r)); break;
+        default: break;
+        }
+        /* The next row-major index: the last dimension moves fastest. */
+        for (int k = nd - 1; k >= 0; k--) {
+            idx[k]++;
+            c += stride[k];
+            if (idx[k] < dim[k])
+                break;
+            c -= stride[k] * dim[k];
+            idx[k] = 0;
+        }
+    }
+    UNPROTECT(1);
+    return out;
+}
+
+/* Tags 40 (row-major) and 1040 (column-major): [dimensions, elements],
+ * whose shape the check has proved. The elements are built as any array
+ * or typed array is, then given R's dim attribute; tag 40's are reordered
+ * into R's order. If a tag handler made the elements something other than
+ * a vector of the right length, the tag stays a cbor_tag. */
+static SEXP build_ndarray(zu_builder *b, CborTag tag, CborValue *it, int *kind, const uint8_t *at)
+{
+    CborValue outer, dv;
+    (void) next_count(b, at);                    /* 2, by the check */
+    CborError err = cbor_value_enter_container(it, &outer);
+    if (err)
+        internal(b, err, at);
+    size_t nd = next_count(b, at);
+    SEXP dim = PROTECT(Rf_allocVector(INTSXP, (R_xlen_t) nd));
+    double product = 1;
+    err = cbor_value_enter_container(&outer, &dv);
+    if (err)
+        internal(b, err, at);
+    for (size_t k = 0; k < nd; k++) {
+        const uint8_t *d_at = cbor_value_get_next_byte(&dv);
+        uint64_t d;
+        cbor_value_get_raw_integer(&dv, &d);
+        if (d > (uint64_t) INT_MAX)
+            fail_build(b, ZU_ERR_DIMENSION, "an array dimension beyond what R allows", d_at);
+        INTEGER(dim)[k] = (int) d;
+        product *= (double) d;
+        advance(b, &dv, d_at);
+    }
+    err = cbor_value_leave_container(&outer, &dv);
+    if (err)
+        internal(b, err, at);
+    /* A handler's result may be shared, so it is not modified in place. */
+    int shared = 0;
+    if (cbor_value_is_tag(&outer)) {
+        CborTag t;
+        cbor_value_get_tag(&outer, &t);
+        shared = find_handler(b, t) != R_NilValue;
+    }
+    int inner;
+    SEXP el = PROTECT(build(b, &outer, &inner));
+    err = cbor_value_leave_container(it, &outer);
+    if (err)
+        internal(b, err, at);
+    *kind = K_OTHER;
+
+    int vector = (Rf_isVectorAtomic(el) && TYPEOF(el) != RAWSXP && TYPEOF(el) != CPLXSXP)
+                 || (TYPEOF(el) == VECSXP && Rf_getAttrib(el, R_ClassSymbol) == R_NilValue);
+    if (!vector || (double) XLENGTH(el) != product) {
+        SEXP content = PROTECT(Rf_allocVector(VECSXP, 2));
+        SET_VECTOR_ELT(content, 0, dim);
+        SET_VECTOR_ELT(content, 1, el);
+        SEXP out = make_tag(b, tag, content, at);
+        UNPROTECT(3);
+        return out;
+    }
+    SEXP out = el;
+    if (tag == 40 && nd > 1)
+        out = to_column_major(el, INTEGER(dim), (int) nd);
+    PROTECT(out);
+    if (out == el && shared) {
+        out = Rf_shallow_duplicate(el);
+        UNPROTECT(1);
+        PROTECT(out);
+    }
+    strip_as_is(out);
+    Rf_setAttrib(out, R_DimSymbol, dim);
+    UNPROTECT(3);
+    return out;
+}
+
 /* The caller's handler for this tag, or R_NilValue. Handler names are
  * whole numbers up to 2^53, so a larger tag, which a double would round,
  * has none. */
@@ -399,6 +630,9 @@ static SEXP build_tag(zu_builder *b, CborValue *it, int *kind)
     case 2:
     case 3:
         return bignum(b, tag, it, kind, at);
+    case 40:
+    case 1040:
+        return build_ndarray(b, tag, it, kind, at);
     case 100: {
         uint64_t raw;
         cbor_value_get_raw_integer(it, &raw);
@@ -417,6 +651,9 @@ static SEXP build_tag(zu_builder *b, CborValue *it, int *kind)
         return classed_real(days, "Date", 0);
     }
     default: {
+        /* RFC 8746 typed arrays; binary128 (83, 87) has no R type. */
+        if (zu_typed_size(tag) && zu_typed_size(tag) < 16)
+            return typed_array(b, tag, it, kind, at);
         int inner;
         SEXP value = build(b, it, &inner);
         *kind = K_OTHER;

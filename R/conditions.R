@@ -17,16 +17,18 @@
 #'     early, uses a reserved encoding, has a misplaced "break", or has bytes
 #'     after the item.}
 #'   \item{`zucbor_invalid_error`}{The input is well-formed but not valid:
-#'     a text string that is not UTF-8, or a tag whose content has the wrong
-#'     type.}
+#'     a text string that is not UTF-8, a tag whose content has the wrong
+#'     type, a typed array whose length is not a whole number of elements,
+#'     or a multi-dimensional array whose shape does not match its
+#'     elements.}
 #'   \item{`zucbor_deterministic_error`}{`deterministic = TRUE` and the input
 #'     is not in RFC 8949 core deterministic encoding.}
 #'   \item{`zucbor_duplicate_key`}{A map has the same key twice and
 #'     `duplicate_keys = FALSE`.}
 #'   \item{`zucbor_unrepresentable`}{The input is valid CBOR but holds a
 #'     value R cannot: a text string containing U+0000 or longer than an R
-#'     string, a tag number beyond 2^53, or an integer beyond 2^53 with
-#'     `big_integers = "error"`.}
+#'     string, a tag number beyond 2^53, an integer beyond 2^53 with
+#'     `big_integers = "error"`, or an array dimension beyond R's limit.}
 #'   \item{`zucbor_unsupported_type`}{[cbor_encode()] was given an R value
 #'     with no CBOR form, such as a function, an environment, `POSIXlt` or a
 #'     data frame.}
@@ -108,6 +110,9 @@ zu_status_class <- local({
     ZU_ERR_SIZE_LIMIT = c("zucbor_size_limit", "zucbor_limit_error"),
     CborErrorDataTooLarge = "zucbor_limit_error",
     ZU_ERR_INVALID_DATE = invalid,
+    ZU_ERR_TYPED_ARRAY = invalid,
+    ZU_ERR_ARRAY_SHAPE = invalid,
+    ZU_ERR_DIMENSION = "zucbor_unrepresentable",
     ZU_ERR_KEY_COLLISION = dup,
     ZU_ERR_NUL_IN_TEXT = "zucbor_unrepresentable",
     ZU_ERR_STRING_TOO_LONG = "zucbor_unrepresentable",

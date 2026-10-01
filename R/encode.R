@@ -41,6 +41,21 @@
 #' partly missing, `NA` or empty are `zucbor_invalid_argument`, and two keys
 #' that encode identically are `zucbor_duplicate_key`.
 #'
+#' @section Typed arrays:
+#' With `typed_arrays = TRUE`, an `integer` or `double` vector that would be
+#' written as an array (not a single value) is one tagged byte string
+#' instead of one item per element: tag 78 (32-bit signed integers) or tag
+#' 86 (64-bit floats), little-endian on every platform. Every bit is kept:
+#' `NA_integer_` is written as the smallest 32-bit integer, which decodes to
+#' `NA_integer_` again, and `NA_real_`, `NaN` and `-0` keep their bits. A
+#' whole double stays a float, unlike in an array. A matrix or array, of any
+#' type, is tag 1040: its dimensions and its elements in R's column-major
+#' order, the elements a typed array when they are numeric. Vectors with a
+#' class, such as factors and dates, are written as without the option.
+#'
+#' For 10^6 doubles, a typed array is 8 MB against 9 MB as an array, and is
+#' written and read several times faster.
+#'
 #' @section Conversions that do not round-trip:
 #' Decoding what `cbor_encode()` wrote gives back the value, except that:
 #' `NA` comes back as `NULL`, or `NA` of the vector's type; a whole double
@@ -57,6 +72,9 @@
 #' @param max_depth Deepest nesting to write, counting arrays, maps and tags
 #'   as [cbor_decode()] does, so its output always decodes at the same
 #'   `max_depth`.
+#' @param typed_arrays If `TRUE`, write numeric vectors, matrices and arrays
+#'   as RFC 8746 typed arrays: see "Typed arrays". Off by default, since many
+#'   decoders do not read them.
 #' @return A raw vector.
 #' @seealso [cbor_decode()], [as_cbor()], [cbor-values].
 #' @export
@@ -72,25 +90,29 @@
 #'
 #' cbor_encode_seq(list(1, "a", TRUE))
 cbor_encode <- function(x, auto_unbox = TRUE, self_describe = FALSE,
-                        max_depth = 256L) {
-  zu_encode(x, sequence = FALSE, auto_unbox, self_describe, max_depth, sys.call())
+                        max_depth = 256L, typed_arrays = FALSE) {
+  zu_encode(x, sequence = FALSE, auto_unbox, self_describe, max_depth,
+            typed_arrays, sys.call())
 }
 
 #' @rdname cbor_encode
 #' @export
 cbor_encode_seq <- function(x, auto_unbox = TRUE, self_describe = FALSE,
-                            max_depth = 256L) {
+                            max_depth = 256L, typed_arrays = FALSE) {
   call <- sys.call()
   if (!is.list(x) || is.object(x)) {
     zu_invalid_argument("x", "`x` must be a plain list: each element is one item of the sequence.", call)
   }
-  zu_encode(x, sequence = TRUE, auto_unbox, self_describe, max_depth, call)
+  zu_encode(x, sequence = TRUE, auto_unbox, self_describe, max_depth,
+            typed_arrays, call)
 }
 
-zu_encode <- function(x, sequence, auto_unbox, self_describe, max_depth, call) {
+zu_encode <- function(x, sequence, auto_unbox, self_describe, max_depth,
+                      typed_arrays, call) {
   zu_arg_flag(auto_unbox, "auto_unbox", call)
   zu_arg_flag(self_describe, "self_describe", call)
+  zu_arg_flag(typed_arrays, "typed_arrays", call)
   zu_arg_limit(max_depth, "max_depth", zu_max_depth_cap(), allow_inf = FALSE, call)
-  opts <- as.integer(c(sequence, auto_unbox, self_describe, max_depth))
+  opts <- as.integer(c(sequence, auto_unbox, self_describe, max_depth, typed_arrays))
   .Call(zucbor_encode, x, opts, call, topenv())
 }

@@ -14,7 +14,12 @@ spec <- utils::read.delim(file.path(fx, "spec-examples.tsv"), quote = "", colCla
 hex <- c(rfc8949_appendix_a()$hex, unlist(rfc8949_not_well_formed()),
          qcbor[!startsWith(qcbor, "#")], cose$hex, spec$hex,
          "9f9f9f9f9f9f9f9fffffffffffffffff", "a3616101616201616101",
-         "c2490100000000000000ff", "5f41004101ff", "bf616100ff")
+         "c2490100000000000000ff", "5f41004101ff", "bf616100ff",
+         # RFC 8746 typed and multi-dimensional arrays (Stage 12).
+         "d8564800000000000000f8", "d84e4c010000000200000003000000",
+         "d8545f42003c42003cff", "d8474800000000000000ff",
+         "d9041082820203d84e5818000000000000000000000000000000000000000000000000",
+         "d8288282020386010203040506", "d90410828180820102")
 hex <- unique(gsub(" ", "", hex))
 n <- 0L
 for (h in hex) {

@@ -68,6 +68,9 @@ static const char *const own_statuses[] = {
     ZU_ERR_KEY_COLLISION,
     ZU_ERR_UNSUPPORTED_TYPE,
     ZU_ERR_INVALID_VALUE,
+    ZU_ERR_TYPED_ARRAY,
+    ZU_ERR_ARRAY_SHAPE,
+    ZU_ERR_DIMENSION,
 };
 
 #define N_OWN_STATUSES (sizeof own_statuses / sizeof own_statuses[0])

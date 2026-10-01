@@ -123,4 +123,22 @@ for (x in list(san(1L), list(a = san(2L), b = san(0L)),
   tryCatch(cbor_encode(x), error = function(e) NULL)
 }
 
+# RFC 8746 typed and multi-dimensional arrays (Stage 12): every tag, both
+# byte orders, wrong lengths and shapes, then the encoder's typed paths.
+for (tag in 64:87) for (len in c(0, 1, 7, 8, 16, 24)) {
+  head <- if (tag < 24) as.raw(0xc0 + tag) else as.raw(c(0xd8, tag))
+  check(c(head, as.raw(0x40 + len), as.raw(seq_len(len) * 37 %% 256)))
+}
+for (h in c("d9041082820203d84e5818000000000000000000000000000000000000000000000000",
+            "d8288283020203880102030405060708", "d90410828180820102",
+            "d904108282 1a80000000 00 80", "d904108282 1bffffffffffffffff 1bffffffffffffffff 80",
+            "d90410828102d8565f4800000000000000f04800000000000000f0ff")) {
+  check(hex_raw(h))
+}
+for (v in list(c(1.5, NA, NaN, -0), c(1L, NA), matrix(1:6, 2), array(runif(24), 2:4),
+               matrix(list(1L, "a"), 1), matrix(c("a", NA), 1), I(2.5), integer(0))) {
+  b <- cbor_encode(v, typed_arrays = TRUE)
+  stopifnot(identical(cbor_decode(b), v))
+}
+
 cat("sanitizer exercise complete\n")

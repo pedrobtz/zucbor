@@ -127,10 +127,13 @@ cbor_tag(tag, value)         # tagged item
 cbor_simple(value)           # simple value other than false/true/null/undefined
 cbor_bigint(x)               # integer outside what a double holds exactly
 
+# classes of your own (Stage 10)
+as_cbor(x, ...)              # S3 generic cbor_encode() calls for a class it does not know
+
 zucbor_info()                # TinyCBOR version, compiled limits, defaults
 ```
 
-Thirteen functions, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
+Thirteen functions in 0.1.0, fourteen with `as_cbor()`, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
 
 **Why `decode`/`encode`, not `parse`/`write`.** The siblings' verbs are for text formats. RFC 8949 speaks of encoders and decoders, and so do the protocols this package serves; a user reading COSE code in another language will look for those words.
 
@@ -151,7 +154,8 @@ cbor_decode(
   deterministic  = FALSE,
   max_depth      = 256L,
   max_size       = 64 * 1024^2,
-  max_items      = 1e6
+  max_items      = 1e6,
+  tag_handlers   = NULL    # Stage 10: list("37" = function(value) ...), §6.6
 )
 ```
 
@@ -333,12 +337,23 @@ structure(list(tag = 24, value = as.raw(c(0x82, 0x01, 0x02))), class = "cbor_tag
 Decisions worth recording:
 
 - **Tag 24 (embedded CBOR) is not decoded recursively.** The value stays a `raw`. An automatic nested decode would run outside the caller's limits, or inside them in a way that is hard to explain; `cbor_decode(tag$value)` is explicit and costs one line.
-- **Invalid content for a converted tag is an error** (`zucbor_invalid_error`): a tag 0 string that is not RFC 3339, a tag 1 that is not a number. RFC 8949 §5.3.2 calls such an item invalid. `tags = "keep"` reads it anyway.
+- **Invalid content for a converted tag is an error** (`zucbor_invalid_error`): a tag 0 string that is not RFC 3339, a tag 1 that is not a number. RFC 8949 §5.3.2 calls such an item invalid. The check refuses it whatever `tags` says, since validity is the check's business and `tags` only chooses the R type (corrected at Stage 10: this line used to say `"keep"` reads it anyway, which no stage implemented).
 - **Bignum payloads over 128 bytes stay `cbor_tag`**, with the `raw` payload. Converting to decimal is quadratic in length; 128 bytes (a 1024-bit value) bounds that cost per item while covering every integer a protocol uses as a number. Nothing is lost: the payload is there.
 - **Tag numbers above 2^53 are `zucbor_unrepresentable`.** A tag number is stored as a double. The IANA registry's largest assignments are far below this.
 - A tag counts as one level of depth (§11), as it does in TinyCBOR's own validation.
 
-UUIDs (37) and URIs (32) arrive as `cbor_tag` in v1; converting them is phase 2 (§19).
+UUIDs (37) and URIs (32) arrive as `cbor_tag`, and stay that way: Stage 10 settled §19 Q2 with handlers rather than built-in classes.
+
+**Tag handlers** (Stage 10). `tag_handlers` is a list of functions named by tag number. When the build meets a tag with a handler, it builds the content with the call's options and passes it to the handler; the result takes the tag's place. Decisions:
+
+- **A handler wins** over the conversions in the table, over 55799's stripping, and over `tags = "keep"`. A tag without one follows `tags`.
+- **Handlers run in the build phase, after the check** (§4). User code never sees input that is malformed, invalid or over a limit, and never runs before the limits have passed. The check does not change: a handler gives meaning to valid content, it does not make other content valid, so a tag 0 with a number is still refused before any handler runs.
+- **A result is kind "other"** (§6.3): an array holding one is a list, and a map whose key is one is a `cbor_map`.
+- **Errors** in a handler become `zucbor_handler_error` with `tag` and `parent` (§10), raised from R (`zu_run_handler()`) by unwinding through the build, which is safe by §12. A warning passes through untouched.
+- **Per call, no registry.** Node's cbor2 has a global `Tag.registerDecoder()`; here a result never depends on what some other package registered.
+- **Nesting is explicit.** A handler that decodes tag 24's bytes calls `cbor_decode()` with limits of its own; the outer call's limits do not reach into it, which is the reason tag 24 is not decoded automatically.
+- Handler names are whole numbers in canonical decimal up to 2^53, checked in R; C looks a tag up by binary search over the sorted numbers, and a tag above 2^53, which a double would round, never matches.
+- The arguments are bound in a fresh environment whose parent is the namespace, so nothing is evaluated twice (the `do.call()` lesson of Stage 7) and a traceback shows names, not values. The encoder calls `as_cbor()` the same way (§7.5).
 
 ### 6.7 Dates and times
 
@@ -403,7 +418,7 @@ Vectors follow `zujson`: a length-1 atomic vector is a scalar unless `I()`-wrapp
 
 `zucbor_unsupported_type`, for complex, closures, environments, external pointers, S4 objects, `POSIXlt` (a list of eleven fields, never what anyone meant by a timestamp), and data frames in v1. A `cbor_simple` in 20–31 (reserved, or spelled `false`/`true`/`null`/`undefined`) and an invalid `cbor_bigint` are `zucbor_invalid_argument`: the constructors validate, and the encoder validates again, because nothing stops a user building the structure by hand.
 
-A vector whose class `zucbor` does not know is encoded as its underlying type (`zujson`'s rule): a new S3 class should not be a hard failure.
+A vector whose class `zucbor` does not know is encoded as its underlying type (`zujson`'s rule): a new S3 class should not be a hard failure. Since Stage 10 it first goes through `as_cbor()` (§7.5), whose default returns it unchanged, so the rule still holds when no method exists.
 
 ### 7.4 Known lossy conversions
 
@@ -424,6 +439,17 @@ This table is part of the contract and goes into the user documentation as well.
 | `NA` | `null`, decodes as `NULL` or `NA` | Not as a typed `NA` |
 
 What *does* round-trip is stated as a property and tested as one (§16): for any CBOR item `b` in deterministic form that decodes under the defaults, `cbor_encode(cbor_decode(b))` is `b`, except where one of the rows above applies. The one-element and boolean rules of §6.3 exist to make that true.
+
+### 7.5 Classes of your own: `as_cbor()`
+
+Stage 10. `as_cbor(x, ...)` is an exported S3 generic. The encoder calls it for an object none of whose classes it knows: anything but `POSIXct`, `Date`, `factor`, `data.frame`, `POSIXlt` and zucbor's four classes. `AsIs` neither counts as known nor asks for a call, so `I(x)` of a class with a method is converted. A method returns something the encoder knows, typically a `cbor_tag()`; with `tag_handlers` on the decoder it makes a class round-trip without zucbor knowing it.
+
+- **Once per value.** The result is written as it is, even if its class is again unknown, though its elements are each converted in turn. So no chain of methods can loop, and nothing needs counting.
+- **The default returns `x`**, and a result identical to `x` (the same object) is encoded as its underlying type: 0.1.0's rule, unchanged. A different object *of the same class* is refused with `zucbor_unsupported_type`: it is most likely a method that forgot to convert.
+- **Errors in a method propagate unchanged.** It is the caller's own code, called on the caller's own data, unlike a tag handler, which runs on untrusted input.
+- **Determinism** is the method's to keep: the encoder cannot see what a method depends on. The documentation says a method should depend on nothing but `x`.
+- **Map keys are encoded in one pass** (into a buffer owned like the output) so a method on a `cbor_map` key runs once; before Stage 10 a key was encoded twice, once to measure it.
+- Calling R from the encoder longjmps through it on error; the output and key buffers are owned by finalized external pointers (§12), so nothing leaks.
 
 ---
 
@@ -475,6 +501,7 @@ zucbor_error
 │   └── zucbor_item_limit
 ├── zucbor_unrepresentable    valid CBOR R cannot hold (§6.8)
 ├── zucbor_unsupported_type   an R value with no CBOR form (§7.3)
+├── zucbor_handler_error      a tag handler raised an error (§6.6): tag, parent
 └── zucbor_io_error           a file or connection could not be read
 ```
 
@@ -550,10 +577,12 @@ The invariant, inherited from `zukomp` and `zujson`:
 `zucbor` meets it more simply than its siblings, because TinyCBOR allocates nothing on the paths used here:
 
 - the parser and validator read the caller's buffer (the `RAWSXP` itself, never a copy);
-- the encoder writes into a buffer we hand it (the output `RAWSXP`);
+- the encoder writes into a `malloc()` buffer owned by a finalized external pointer, copied once into the result and then freed eagerly (Stage 8); since Stage 10 each non-text map key is encoded the same way;
 - all scratch — the walk's container stack, duplicate-key descriptors, encoded map keys during sorting — is `R_alloc`ed, which R releases when the `.Call` returns *or* unwinds.
 
-So no C function in the package has an error cleanup path, and `zu_stop()`, `R_CheckUserInterrupt()` and any R allocator may jump from anywhere. `cborparser_dup_string.c`, the only TinyCBOR file that calls `malloc`, is not vendored (§13), so the rule cannot be broken by accident.
+So no C function in the package has an error cleanup path, and `zu_stop()`, `R_CheckUserInterrupt()` and any R allocator may jump from anywhere. Since Stage 10 so may user code: tag handlers run in the middle of the build and `as_cbor()` methods in the middle of the encoder, and either may error, warn, be interrupted, or call zucbor again. Nothing in the build or the encoder is static, so a nested call shares no state with the one it runs inside.
+
+`vmaxset()` releases scratch in bulk, and anything allocated after the mark goes with it. The encoder's per-depth map entry pools (Stage 8) were allocated inside a parent map's mark and outlived it until Stage 10, which found the reuse by reading the code: a map's end now forgets every deeper pool. `cborparser_dup_string.c`, the only TinyCBOR file that calls `malloc`, is not vendored (§13), so the rule cannot be broken by accident.
 
 PROTECT discipline is checked by `rchk` and `gctorture` in CI, and by hand with `gctorture(TRUE)` before a C change is called done.
 
@@ -771,13 +800,16 @@ Revised targets, which the numbers above meet and which a regression would miss:
 | 25 | Booleans in arrays | A kind of their own; `[true, 1]` is a list (§6.3) |
 | 26 | One-element arrays | Marked `I()` on decode, so they re-encode as arrays (§6.3) |
 | 23 | GCC < 11 (trap 8) | Ship 7.0; the README states GCC ≥ 11 (Stage 8). Revisit when upstream releases the fix |
+| 28 | Tags zucbor does not convert | Per-call `tag_handlers`, run after the check; no global registry (§6.6, Stage 10) |
+| 29 | Classes zucbor does not know | Exported S3 generic `as_cbor()`, called once per value (§7.5, Stage 10) |
+| 30 | UUID, IP address, decimal fraction | Recipes in the examples article, not built-in classes (Stage 10) |
 
 ---
 
 ## 19. Open questions
 
 1. **CTAP2 canonical order.** CTAP2 requires RFC 7049 length-first key order; RFC 8949 deterministic encoding is bytewise. They differ (e.g. `24` versus `-1`). Decoding CTAP2 data needs nothing, since signatures cover bytes, not re-encodings. An authenticator emulator would need a `key_order` argument. Add it when a caller asks. Deferred again in [roadmap-0.2.0.md](roadmap-0.2.0.md).
-2. **UUID and URI tags.** Converting 37 to a `cbor_uuid` class and 32 to a character vector, or leaving both as `cbor_tag`. Decide on use. Proposed answer in [roadmap-0.2.0.md](roadmap-0.2.0.md) Stage 10: neither, but a `tag_handlers` argument and documented recipes.
+2. ~~**UUID and URI tags.**~~ Closed at Stage 10: neither becomes a class. `tag_handlers` and `as_cbor()` let a caller convert any tag, and the examples article carries recipes for UUIDs, IP addresses and decimal fractions. Decision 30.
 3. **Data frames.** Encode row-oriented as `zujson` does, and decode arrays of text-keyed maps opt-in. Deferred to keep v1's mapping small; SenML users are the likely askers. Planned as Stage 14 of [roadmap-0.2.0.md](roadmap-0.2.0.md).
 4. ~~**Validation offsets.**~~ Closed at Stage 8: UTF-8 and tag content are checked by the walk and have offsets; only deterministic-encoding faults, from TinyCBOR's validator, have `offset = NA`. Validating per item from the walk would recover it at some cost to throughput. Measure first.
 5. **The bignum conversion cap** (128 bytes, §6.6). Revisit if a protocol uses larger integers as numbers rather than as opaque bytes.

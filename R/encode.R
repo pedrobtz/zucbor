@@ -26,8 +26,9 @@
 #'
 #' A length-one atomic vector is a single value, not an array, unless it is
 #' wrapped in [I()] or `auto_unbox = FALSE`. A matrix is a flat array in
-#' column-major order. A vector whose class zucbor does not know is written
-#' as its underlying type.
+#' column-major order. An object whose class zucbor does not know goes
+#' through [as_cbor()] first, so a method can say how to write it; without
+#' one it is written as its underlying type.
 #'
 #' Whole doubles become integers because R has no integer literal: `-7`
 #' written in R is a double, and as a CBOR float it would be a different
@@ -57,7 +58,7 @@
 #'   as [cbor_decode()] does, so its output always decodes at the same
 #'   `max_depth`.
 #' @return A raw vector.
-#' @seealso [cbor_decode()], [cbor-values].
+#' @seealso [cbor_decode()], [as_cbor()], [cbor-values].
 #' @export
 #' @examples
 #' cbor_encode(list(a = 1, b = c(2, 3)))
@@ -91,5 +92,5 @@ zu_encode <- function(x, sequence, auto_unbox, self_describe, max_depth, call) {
   zu_arg_flag(self_describe, "self_describe", call)
   zu_arg_limit(max_depth, "max_depth", zu_max_depth_cap(), allow_inf = FALSE, call)
   opts <- as.integer(c(sequence, auto_unbox, self_describe, max_depth))
-  .Call(zucbor_encode, x, opts, call)
+  .Call(zucbor_encode, x, opts, call, topenv())
 }

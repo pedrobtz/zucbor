@@ -19,7 +19,7 @@ The plan is written: [.agents/design.md](../.agents/design.md) is the specificat
 
 Stages 0–8 are done, and the next release is planned in [.agents/roadmap-0.2.0.md](../.agents/roadmap-0.2.0.md) (Stages 10–16, from a survey of Python's and Node's CBOR libraries). `main` carries `0.0.0.9000`, the never-released development version; Stage 9's remaining steps are a human's: set `Version: 0.1.0` and the `NEWS.md` heading, tag `v0.1.0`, submit to CRAN, answer reviewers. The roadmap's Stage 9 table maps each design §20 acceptance criterion to what verifies it.
 
-**API:** `cbor_decode()`/`cbor_decode_seq()`, `cbor_read()`/`cbor_read_seq()`, `cbor_validate()`, `cbor_diagnose()`, `cbor_encode()`/`cbor_encode_seq()`, the value classes `cbor_map()`, `cbor_tag()`, `cbor_simple()`, `cbor_bigint()`, and `zucbor_info()`.
+**API:** `cbor_decode()`/`cbor_decode_seq()`, `cbor_read()`/`cbor_read_seq()`, `cbor_validate()`, `cbor_diagnose()`, `cbor_encode()`/`cbor_encode_seq()`, the value classes `cbor_map()`, `cbor_tag()`, `cbor_simple()`, `cbor_bigint()`, the `as_cbor()` generic, and `zucbor_info()`. The decoders take `tag_handlers =` (design §6.6, §7.5). Work after 0.1.0 follows `.agents/roadmap-0.2.0.md`.
 
 **Architecture** (design §4):
 
@@ -33,7 +33,8 @@ Stages 0–8 are done, and the next release is planned in [.agents/roadmap-0.2.0
 - Security guards in the walk carry a `/* GUARD: name */` marker on their `if` line; `tools/run-mutation-check` proves each is load-bearing. Add a case there for any new guard.
 - Do not switch on `CborValidateTagUse`: TinyCBOR's table refuses valid tag 1 floats (design §3, §11).
 - Three decoder rules make `cbor_encode(cbor_decode(b))` equal `b` and are pinned by `test-roundtrip.R` and the COSE corpus: a one-element array decodes as an `I()` value, booleans do not join the numbers, and whole doubles encode as integers.
-- The encoder writes into a `malloc()` buffer owned by a finalized external pointer: the one place heap memory crosses a longjmp.
+- The encoder writes into a `malloc()` buffer owned by a finalized external pointer (and each non-text map key into one of its own): the only heap memory that crosses a longjmp.
+- User code runs mid-build (tag handlers, via `zu_run_handler()`) and mid-encode (`as_cbor()` methods): it may error, be interrupted, or call zucbor again, so the build and the encoder keep no static state and hold everything `PROTECT`ed or `R_alloc()`ed. Scratch allocated after a `vmaxget()` mark dies at its `vmaxset()`: never keep a pointer to it past that (the encoder's map pools did, until Stage 10).
 - `zu_raise_fault()` builds its condition directly: `do.call()` would evaluate the user's call again.
 - `src/init.c` registers every `.Call` entry point (`R_useDynamicSymbols(dll, FALSE)`, `R_forceSymbols(dll, TRUE)`), so R code calls `.Call(zucbor_x)`, never `.Call("zucbor_x")`.
 
@@ -98,7 +99,7 @@ These are how `zujson`/`zuxml` are built; follow them here unless there is a CBO
 
 - **Vendored sources are never edited in place.** They live under `src/vendor/<lib>/`, byte-identical to a pinned upstream release, refreshed by a script in `tools/`. Local configuration goes in a project-owned header outside the vendor tree.
 - **Portable make only** in `src/Makevars`: list object files in `OBJECTS` by hand (R only auto-compiles `src/*.c`, not subdirectories), and no GNU-make features such as `$(wildcard)` or `$(shell)`, which would cost `SystemRequirements: GNU make`. There is deliberately no `Makevars.win`; Windows falls back to `Makevars`, so there is one list to keep right. Keep `.o`/`.so`/`.dll` out of the build tarball via `.Rbuildignore`.
-- **Naming:** R exports use the format prefix `cbor_` (as `json_`/`xml_` in the siblings), plus `zucbor_info()`; R and C internals use `zu_`, `.Call` entry points use `zucbor_`, condition classes `zucbor_`, and user-facing value classes `cbor_`.
+- **Naming:** R exports use the format prefix `cbor_` (as `json_`/`xml_` in the siblings), plus `zucbor_info()` and the `as_cbor()` generic; R and C internals use `zu_`, `.Call` entry points use `zucbor_`, condition classes `zucbor_`, and user-facing value classes `cbor_`.
 - **Errors are classed conditions**, all inheriting a package base class (e.g. `zujson_error`), raised in C where the cause is known. Tests assert on condition class, never message text.
 - **Heap state that must survive a longjmp is owned by R** (finalized external pointers), since `Rf_error()`, `R_CheckUserInterrupt()` and R allocators jump past any `free()`.
 - **Tests are self-sufficient** (inputs built inside each `test_that()`), pass under `shuffle = TRUE`, stay serial (no `Config/testthat/parallel`, so gctorture/valgrind CI legs actually exercise the C code), and keep the suite to a few seconds for CRAN.

@@ -15,7 +15,8 @@ cbor_decode(
   deterministic = FALSE,
   max_depth = 256L,
   max_size = 64 * 1024^2,
-  max_items = 1e+06
+  max_items = 1e+06,
+  tag_handlers = NULL
 )
 
 cbor_decode_seq(
@@ -28,7 +29,8 @@ cbor_decode_seq(
   deterministic = FALSE,
   max_depth = 256L,
   max_size = 64 * 1024^2,
-  max_items = 1e+06
+  max_items = 1e+06,
+  tag_handlers = NULL
 )
 }
 \arguments{
@@ -66,6 +68,10 @@ At most \code{zucbor_info()$max_depth_cap}.}
 
 \item{max_items}{Most data items allowed, counting every tag and every
 chunk of an indefinite-length string, or \code{Inf}.}
+
+\item{tag_handlers}{\code{NULL}, or a list of functions of one argument, named
+by tag number, such as \code{list("37" = function(value) ...)}. See "Tag
+handlers".}
 }
 \value{
 The decoded value; for \code{cbor_decode_seq()}, a list with one
@@ -114,6 +120,28 @@ deterministic form, apart from the lossy conversions listed in
 \code{null} and \code{undefined} both decode as missing: R has one missing value.
 }
 
+\section{Tag handlers}{
+
+\code{tag_handlers} gives meaning to tags zucbor does not convert, or replaces
+a conversion it does make. Each handler is called with the tag's content,
+decoded with the same options, and its result takes the tag's place:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{cbor_decode(x, tag_handlers = list(
+  "37" = function(value) my_uuid(value),            # RFC 9562 UUID
+  "0"  = function(value) value                      # keep the text
+))
+}\if{html}{\out{</div>}}
+
+A handler runs only once the whole input has been checked, so it never
+sees bytes that are malformed, invalid or over a limit. Its result never
+joins an array's simplification: an array holding one is a list. A
+handler applies whatever \code{tags} says, and a tag without one follows
+\code{tags}. An error in a handler becomes \code{zucbor_handler_error}, with the
+tag number as \code{tag} and the original condition as \code{parent}. A handler
+that calls \code{cbor_decode()} again, for CBOR embedded in a byte string,
+passes that call its own limits. \code{\link[=as_cbor]{as_cbor()}} is the encoding half.
+}
+
 \examples{
 cbor_decode(as.raw(c(0x83, 0x01, 0x02, 0x03)))        # [1, 2, 3]
 cbor_decode(as.raw(c(0xa1, 0x61, 0x61, 0xf5)))        # {"a": true}
@@ -125,6 +153,6 @@ hdr
 cbor_decode_seq(as.raw(c(0x01, 0x61, 0x61)))          # 1, then "a"
 }
 \seealso{
-\code{\link[=cbor_encode]{cbor_encode()}}, \code{\link[=cbor_validate]{cbor_validate()}}, \code{\link[=cbor_read]{cbor_read()}}, \link{cbor-values},
-\link{zucbor-conditions}.
+\code{\link[=cbor_encode]{cbor_encode()}}, \code{\link[=as_cbor]{as_cbor()}}, \code{\link[=cbor_validate]{cbor_validate()}}, \code{\link[=cbor_read]{cbor_read()}},
+\link{cbor-values}, \link{zucbor-conditions}.
 }

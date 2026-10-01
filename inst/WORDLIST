@@ -5,6 +5,7 @@ CDDL
 CMD
 COSE
 CoAP
+IPv
 RFC's
 TinyCBOR
 TinyCBOR's
@@ -14,6 +15,7 @@ bignums
 booleans
 bytewise
 formedness
+roxygen
 stringified
 tinycbor
 zucbor's

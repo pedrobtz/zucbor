@@ -39,6 +39,27 @@
 #'
 #' `null` and `undefined` both decode as missing: R has one missing value.
 #'
+#' @section Tag handlers:
+#' `tag_handlers` gives meaning to tags zucbor does not convert, or replaces
+#' a conversion it does make. Each handler is called with the tag's content,
+#' decoded with the same options, and its result takes the tag's place:
+#'
+#' ```
+#' cbor_decode(x, tag_handlers = list(
+#'   "37" = function(value) my_uuid(value),            # RFC 9562 UUID
+#'   "0"  = function(value) value                      # keep the text
+#' ))
+#' ```
+#'
+#' A handler runs only once the whole input has been checked, so it never
+#' sees bytes that are malformed, invalid or over a limit. Its result never
+#' joins an array's simplification: an array holding one is a list. A
+#' handler applies whatever `tags` says, and a tag without one follows
+#' `tags`. An error in a handler becomes `zucbor_handler_error`, with the
+#' tag number as `tag` and the original condition as `parent`. A handler
+#' that calls `cbor_decode()` again, for CBOR embedded in a byte string,
+#' passes that call its own limits. [as_cbor()] is the encoding half.
+#'
 #' @param x A raw vector holding exactly one CBOR data item
 #'   (`cbor_decode()`), or an RFC 8742 sequence of zero or more
 #'   (`cbor_decode_seq()`).
@@ -54,11 +75,14 @@
 #' @param big_integers What to do with an integer beyond 2^53, which a
 #'   double cannot hold exactly: `"bigint"` returns a `cbor_bigint`,
 #'   `"double"` the nearest double, and `"error"` refuses the input.
+#' @param tag_handlers `NULL`, or a list of functions of one argument, named
+#'   by tag number, such as `list("37" = function(value) ...)`. See "Tag
+#'   handlers".
 #' @inheritParams cbor_validate
 #' @return The decoded value; for `cbor_decode_seq()`, a list with one
 #'   element per item.
-#' @seealso [cbor_encode()], [cbor_validate()], [cbor_read()], [cbor-values],
-#'   [zucbor-conditions].
+#' @seealso [cbor_encode()], [as_cbor()], [cbor_validate()], [cbor_read()],
+#'   [cbor-values], [zucbor-conditions].
 #' @export
 #' @examples
 #' cbor_decode(as.raw(c(0x83, 0x01, 0x02, 0x03)))        # [1, 2, 3]
@@ -75,10 +99,10 @@ cbor_decode <- function(x, simplify = c("preserve", "none"),
                         big_integers = c("bigint", "double", "error"),
                         duplicate_keys = FALSE, deterministic = FALSE,
                         max_depth = 256L, max_size = 64 * 1024^2,
-                        max_items = 1e6) {
+                        max_items = 1e6, tag_handlers = NULL) {
   zu_decode(x, sequence = FALSE, simplify, map_keys, tags, big_integers,
             duplicate_keys, deterministic, max_depth, max_size, max_items,
-            call = sys.call())
+            tag_handlers, call = sys.call())
 }
 
 #' @rdname cbor_decode
@@ -89,15 +113,15 @@ cbor_decode_seq <- function(x, simplify = c("preserve", "none"),
                             big_integers = c("bigint", "double", "error"),
                             duplicate_keys = FALSE, deterministic = FALSE,
                             max_depth = 256L, max_size = 64 * 1024^2,
-                            max_items = 1e6) {
+                            max_items = 1e6, tag_handlers = NULL) {
   zu_decode(x, sequence = TRUE, simplify, map_keys, tags, big_integers,
             duplicate_keys, deterministic, max_depth, max_size, max_items,
-            call = sys.call())
+            tag_handlers, call = sys.call())
 }
 
 zu_decode <- function(x, sequence, simplify, map_keys, tags, big_integers,
                       duplicate_keys, deterministic, max_depth, max_size,
-                      max_items, call) {
+                      max_items, tag_handlers, call) {
   zu_arg_raw(x, "x", call)
   simplify <- zu_arg_choice(simplify, "simplify", c("preserve", "none"), call)
   map_keys <- zu_arg_choice(map_keys, "map_keys", c("auto", "map", "string"), call)
@@ -107,12 +131,14 @@ zu_decode <- function(x, sequence, simplify, map_keys, tags, big_integers,
   zu_arg_flag(duplicate_keys, "duplicate_keys", call)
   zu_arg_flag(deterministic, "deterministic", call)
   zu_arg_limits(max_depth, max_size, max_items, call)
+  handlers <- zu_arg_handlers(tag_handlers, call)
   if (length(x) > max_size) {
     zu_raise_fault(zu_size_fault(max_size), call)
   }
   opts <- c(sequence, deterministic, duplicate_keys, max_depth,
             simplify, map_keys, tags, big_integers) # integer codes
-  res <- .Call(zucbor_decode, x, as.integer(opts), as.numeric(max_items), call)
+  res <- .Call(zucbor_decode, x, as.integer(opts), as.numeric(max_items), call,
+               handlers)
   if (!is.null(res[[1L]])) zu_raise_fault(res[[1L]], call)
   res[[2L]]
 }
@@ -133,4 +159,40 @@ zu_size_fault <- function(max_size) {
     status = "ZU_ERR_SIZE_LIMIT", detail = NA_character_, offset = NA_real_,
     limit = "max_size", limit_value = as.numeric(max_size)
   ), class = "zu_fault")
+}
+
+# tag_handlers as C reads it: NULL, or list(tag numbers sorted, functions in
+# the same order, the namespace that zu_run_handler() is called from).
+zu_arg_handlers <- function(h, call = NULL) {
+  if (is.null(h)) return(NULL)
+  bad <- function(why) {
+    zu_invalid_argument("tag_handlers", paste0(
+      "`tag_handlers` must be NULL or a list of functions named by tag number: ",
+      why, "."), call)
+  }
+  if (!is.list(h) || is.object(h)) bad("it is not a plain list")
+  if (length(h) == 0L) return(NULL)
+  nm <- names(h)
+  if (is.null(nm) || anyNA(nm) || !all(grepl("^(0|[1-9][0-9]{0,15})$", nm))) {
+    bad("every name must be a tag number, such as \"37\"")
+  }
+  tags <- as.numeric(nm)
+  # 2^53 + 1 parses as 2^53: compare that one by its digits.
+  if (any(tags > 2^53 | (tags == 2^53 & nm != "9007199254740992"))) {
+    bad("tag numbers above 2^53 cannot be named exactly")
+  }
+  if (anyDuplicated(tags)) bad("a tag number is named twice")
+  if (!all(vapply(h, is.function, logical(1L)))) bad("every element must be a function")
+  o <- order(tags)
+  list(tags[o], unname(h[o]), topenv())
+}
+
+# Called from C for each tag with a handler (src/zu_build.c, run_handler).
+zu_run_handler <- function(handler, value, tag, call) {
+  tryCatch(handler(value), error = function(e) {
+    zu_abort("zucbor_handler_error",
+             paste0("the handler for tag ", format(tag, scientific = FALSE),
+                    " failed: ", conditionMessage(e)),
+             tag = tag, parent = e, call = call)
+  })
 }

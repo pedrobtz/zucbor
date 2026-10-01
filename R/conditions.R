@@ -30,6 +30,9 @@
 #'   \item{`zucbor_unsupported_type`}{[cbor_encode()] was given an R value
 #'     with no CBOR form, such as a function, an environment, `POSIXlt` or a
 #'     data frame.}
+#'   \item{`zucbor_handler_error`}{A function in [cbor_decode()]'s
+#'     `tag_handlers` raised an error. The condition carries `tag`, the tag
+#'     number, and `parent`, the error the handler raised.}
 #'   \item{`zucbor_limit_error`}{A limit was reached. The subclasses
 #'     `zucbor_depth_limit`, `zucbor_size_limit` and `zucbor_item_limit` name
 #'     which one.}

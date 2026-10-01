@@ -378,6 +378,36 @@ were built: deterministic encoding writes map keys sorted by their
 encoded bytes, shorter keys first, and decoding keeps the order it
 reads. Select columns by name when order matters.
 
+## Numeric data as typed arrays
+
+RFC 8746 writes a numeric vector as one byte string instead of one item
+per element. zucbor always decodes such typed arrays, and writes them
+when asked, along with matrices as tag 1040:
+
+``` r
+
+m <- matrix(c(1.5, NA, -0, Inf), 2)
+bytes <- cbor_encode(m, typed_arrays = TRUE)
+cbor_diagnose(bytes)
+#> [1] "1040([[2, 2], 86(h'000000000000f83fa20700000000f07f0000000000000080000000000000f07f')])"
+identical(cbor_decode(bytes), m)
+#> [1] TRUE
+```
+
+Every bit survives, `NA` and `-0` included. For large data it is smaller
+and much faster in both directions:
+
+``` r
+
+x <- runif(1e5)
+c(array = length(cbor_encode(x)), typed = length(cbor_encode(x, typed_arrays = TRUE)))
+#>  array  typed 
+#> 892249 800007
+```
+
+It is off by default because many CBOR decoders do not implement RFC
+8746; use it when you know the reader does.
+
 ## Files and connections
 
 [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)

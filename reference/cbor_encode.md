@@ -9,9 +9,21 @@ each value exactly; and map entries sorted by their encoded keys.
 ## Usage
 
 ``` r
-cbor_encode(x, auto_unbox = TRUE, self_describe = FALSE, max_depth = 256L)
+cbor_encode(
+  x,
+  auto_unbox = TRUE,
+  self_describe = FALSE,
+  max_depth = 256L,
+  typed_arrays = FALSE
+)
 
-cbor_encode_seq(x, auto_unbox = TRUE, self_describe = FALSE, max_depth = 256L)
+cbor_encode_seq(
+  x,
+  auto_unbox = TRUE,
+  self_describe = FALSE,
+  max_depth = 256L,
+  typed_arrays = FALSE
+)
 ```
 
 ## Arguments
@@ -37,6 +49,12 @@ cbor_encode_seq(x, auto_unbox = TRUE, self_describe = FALSE, max_depth = 256L)
   Deepest nesting to write, counting arrays, maps and tags as
   [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md)
   does, so its output always decodes at the same `max_depth`.
+
+- typed_arrays:
+
+  If `TRUE`, write numeric vectors, matrices and arrays as RFC 8746
+  typed arrays: see "Typed arrays". Off by default, since many decoders
+  do not read them.
 
 ## Value
 
@@ -82,6 +100,23 @@ numbers, functions, environments, external pointers, S4 objects,
 frames. Names that are partly missing, `NA` or empty are
 `zucbor_invalid_argument`, and two keys that encode identically are
 `zucbor_duplicate_key`.
+
+## Typed arrays
+
+With `typed_arrays = TRUE`, an `integer` or `double` vector that would
+be written as an array (not a single value) is one tagged byte string
+instead of one item per element: tag 78 (32-bit signed integers) or tag
+86 (64-bit floats), little-endian on every platform. Every bit is kept:
+`NA_integer_` is written as the smallest 32-bit integer, which decodes
+to `NA_integer_` again, and `NA_real_`, `NaN` and `-0` keep their bits.
+A whole double stays a float, unlike in an array. A matrix or array, of
+any type, is tag 1040: its dimensions and its elements in R's
+column-major order, the elements a typed array when they are numeric.
+Vectors with a class, such as factors and dates, are written as without
+the option.
+
+For 10^6 doubles, a typed array is 8 MB against 9 MB as an array, and is
+written and read several times faster.
 
 ## Conversions that do not round-trip
 

@@ -47,21 +47,35 @@ as a COSE_Key, which is CBOR again.
 ```{r}
 ad <- ao$authData
 id_len <- as.integer(ad[54]) * 256L + as.integer(ad[55])
-key <- cbor_decode(ad[(56 + id_len):length(ad)])
-key
+rest <- ad[-seq_len(55 + id_len)]
+key <- cbor_decode_prefix(rest)
+key$value
 ```
 
-A COSE_Key uses integer map keys, so it is a `cbor_map`. Key 1 is the key
-type (2, EC2), 3 the algorithm (-7, ES256), -1 the curve (1, P-256), and
--2 and -3 the coordinates. `cbor_diagnose()` shows the same thing the way
-the specifications write it:
+`cbor_decode_prefix()` decodes the one item at the start of `rest` and says
+how many bytes it took, without reading past it. That matters here: the
+key's length is not written anywhere, and what follows it, if anything, is
+up to the flags byte, not up to CBOR. A COSE_Key uses integer map keys, so
+it is a `cbor_map`. Key 1 is the key type (2, EC2), 3 the algorithm (-7,
+ES256), -1 the curve (1, P-256), and -2 and -3 the coordinates.
+`cbor_diagnose()` shows the same thing the way the specifications write it:
 
 ```{r}
-cbor_diagnose(ad[(56 + id_len):length(ad)])
+cbor_diagnose(rest[seq_len(key$consumed)])
 ```
 
-If the authenticator had included extensions, they would follow the key as
-a second CBOR item; `cbor_decode_seq()` reads both.
+Bit 7 of the flags byte (`ED`) says whether extensions follow the key, as
+one more CBOR map. Here it is clear, and nothing follows:
+
+```{r}
+flags <- as.integer(ad[33])
+bitwAnd(flags, 0x80L) != 0L        # extensions?
+length(rest) - key$consumed        # bytes after the key
+```
+
+Had it been set, `cbor_decode(rest[-seq_len(key$consumed)])` would read
+them, and would refuse anything after the extensions, as the layout
+requires.
 
 ## Re-encoding what was signed
 

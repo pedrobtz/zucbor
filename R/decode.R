@@ -100,7 +100,7 @@ cbor_decode <- function(x, simplify = c("preserve", "none"),
                         duplicate_keys = FALSE, deterministic = FALSE,
                         max_depth = 256L, max_size = 64 * 1024^2,
                         max_items = 1e6, tag_handlers = NULL) {
-  zu_decode(x, sequence = FALSE, simplify, map_keys, tags, big_integers,
+  zu_decode(x, mode = 0L, simplify, map_keys, tags, big_integers,
             duplicate_keys, deterministic, max_depth, max_size, max_items,
             tag_handlers, call = sys.call())
 }
@@ -114,12 +114,13 @@ cbor_decode_seq <- function(x, simplify = c("preserve", "none"),
                             duplicate_keys = FALSE, deterministic = FALSE,
                             max_depth = 256L, max_size = 64 * 1024^2,
                             max_items = 1e6, tag_handlers = NULL) {
-  zu_decode(x, sequence = TRUE, simplify, map_keys, tags, big_integers,
+  zu_decode(x, mode = 1L, simplify, map_keys, tags, big_integers,
             duplicate_keys, deterministic, max_depth, max_size, max_items,
             tag_handlers, call = sys.call())
 }
 
-zu_decode <- function(x, sequence, simplify, map_keys, tags, big_integers,
+# mode: 0 exactly one item, 1 a sequence, 2 a prefix (as C reads it).
+zu_decode <- function(x, mode, simplify, map_keys, tags, big_integers,
                       duplicate_keys, deterministic, max_depth, max_size,
                       max_items, tag_handlers, call) {
   zu_arg_raw(x, "x", call)
@@ -135,12 +136,53 @@ zu_decode <- function(x, sequence, simplify, map_keys, tags, big_integers,
   if (length(x) > max_size) {
     zu_raise_fault(zu_size_fault(max_size), call)
   }
-  opts <- c(sequence, deterministic, duplicate_keys, max_depth,
+  opts <- c(mode, deterministic, duplicate_keys, max_depth,
             simplify, map_keys, tags, big_integers) # integer codes
   res <- .Call(zucbor_decode, x, as.integer(opts), as.numeric(max_items), call,
                handlers)
   if (!is.null(res[[1L]])) zu_raise_fault(res[[1L]], call)
-  res[[2L]]
+  if (mode == 2L) list(value = res[[2L]], consumed = res[[3L]]) else res[[2L]]
+}
+
+#' Decode the CBOR item at the start of a raw vector
+#'
+#' Decodes the one CBOR data item that `x` starts with and reports how many
+#' bytes it used, for CBOR inside binary framing: a COSE key in the middle
+#' of WebAuthn `authData`, or a payload after a fixed header. The item is
+#' checked and decoded exactly as by [cbor_decode()], with the same
+#' arguments; what follows it is not read at all.
+#'
+#' That also means nothing about the rest is known: it may be more CBOR, or
+#' the next field of the framing, or garbage. It is the caller's to make
+#' sense of, as `x[-seq_len(consumed)]`.
+#'
+#' `max_size` applies to `x` as a whole, since all of it is in memory
+#' already. An empty `x` is `zucbor_parse_error`, as for `cbor_decode()`;
+#' so is an item cut short by the end of `x`.
+#'
+#' @inheritParams cbor_decode
+#' @param x A raw vector starting with a CBOR data item.
+#' @return A list: `value`, the decoded item, and `consumed`, the number of
+#'   bytes it took, a double.
+#' @seealso [cbor_decode()] for one item and nothing else, and
+#'   [cbor_decode_seq()] for items all the way to the end.
+#' @export
+#' @examples
+#' # [1, 2] followed by four bytes of something else.
+#' x <- as.raw(c(0x82, 0x01, 0x02, 0xde, 0xad, 0xbe, 0xef))
+#' r <- cbor_decode_prefix(x)
+#' r$value
+#' x[-seq_len(r$consumed)]
+cbor_decode_prefix <- function(x, simplify = c("preserve", "none"),
+                               map_keys = c("auto", "map", "string"),
+                               tags = c("convert", "keep"),
+                               big_integers = c("bigint", "double", "error"),
+                               duplicate_keys = FALSE, deterministic = FALSE,
+                               max_depth = 256L, max_size = 64 * 1024^2,
+                               max_items = 1e6, tag_handlers = NULL) {
+  zu_decode(x, mode = 2L, simplify, map_keys, tags, big_integers,
+            duplicate_keys, deterministic, max_depth, max_size, max_items,
+            tag_handlers, call = sys.call())
 }
 
 # The 0-based code of a choice, the way C reads it. The default is the whole

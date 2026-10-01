@@ -21,7 +21,7 @@ int main(int argc, char **argv)
         sscanf(argv[1] + 2 * i, "%2x", &v);
         buf[i] = (uint8_t) v;
     }
-    zu_check_opts opt = {256, UINT64_MAX, 0, 0, 0};
+    zu_check_opts opt = {256, UINT64_MAX, 0, 0, 0, 0};
     if (argc >= 7) {
         opt.sequence = atoi(argv[2]);
         opt.deterministic = atoi(argv[3]);

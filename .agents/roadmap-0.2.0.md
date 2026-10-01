@@ -73,7 +73,7 @@ Lets a caller give meaning to a tag zucbor does not convert, and teach `cbor_enc
 
 ## Stage 11 — Decoding a prefix · S
 
-**Status:** not started.
+**Status:** done, 2026-10-01 (#31). Design §5; decision 31.
 
 CBOR often sits inside binary framing. A WebAuthn `authData` puts a COSE key in the middle of fixed fields, and a CoAP payload follows a binary header. `cbor_decode()` refuses trailing bytes and `cbor_decode_seq()` needs every remaining byte to be CBOR, so neither reads "one item, then whatever comes next".
 
@@ -85,6 +85,12 @@ CBOR often sits inside binary framing. A WebAuthn `authData` puts a COSE key in 
 **Exit**
 - The COSE and WebAuthn vignette reads `authData`'s credential key with `cbor_decode_prefix()`, which also handles the extensions case without assuming that what follows is CBOR.
 - Tests cover trailing garbage, trailing valid CBOR, an item exactly filling the input, and every Appendix A example with random bytes appended.
+**What actually happened**
+
+- The proposed decisions held as written. The check phase gained a `prefix` option that returns after the first item, before the trailing-bytes guard; the build phase was already item-at-a-time, so the decoder only reports where the item ended. The R side became `zu_decode(mode = 0, 1, 2)` rather than a second flag.
+- TinyCBOR reads nothing past a top-level item (it preparses the next value only inside a container), so "not read" is literal, and a test appends a stray break, a truncated head, bad UTF-8, nesting past every limit, an absurd length and too many items after the item, all with no effect.
+- The fuzz target gained two invariants: an input that passes as one item passes as a prefix consuming every byte, and a prefix consuming n bytes passes as one item over those n.
+- The COSE and WebAuthn vignette now reads the credential key with `cbor_decode_prefix()` and checks the `ED` flag before treating anything after it as extensions.
 
 ---
 

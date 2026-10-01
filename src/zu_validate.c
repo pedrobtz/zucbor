@@ -11,6 +11,7 @@ SEXP zucbor_check(SEXP x, SEXP sequence, SEXP deterministic,
     opt.deterministic = Rf_asLogical(deterministic) == TRUE;
     opt.duplicate_keys = Rf_asLogical(duplicate_keys) == TRUE;
     opt.max_depth = Rf_asInteger(max_depth);
+    opt.prefix = 0;
     double mi = Rf_asReal(max_items);
     if (opt.max_depth < 1 || opt.max_depth > ZU_MAX_DEPTH_CAP || ISNAN(mi) || mi < 1)
         Rf_error("zucbor_check: limits must be validated in R");

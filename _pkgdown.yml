@@ -12,6 +12,7 @@ reference:
   - title: Decode
     contents:
       - cbor_decode
+      - cbor_decode_prefix
       - cbor_read
       - cbor_validate
       - cbor_diagnose

@@ -464,6 +464,7 @@ SEXP zucbor_diagnose(SEXP x, SEXP opts, SEXP max_items)
     opt.deterministic = o[1];
     opt.duplicate_keys = o[2];
     opt.max_depth = o[3];
+    opt.prefix = 0;
     double mi = Rf_asReal(max_items);
     if (opt.max_depth < 1 || opt.max_depth > ZU_MAX_DEPTH_CAP || ISNAN(mi) || mi < 1)
         Rf_error("zucbor_diagnose: limits must be validated in R");

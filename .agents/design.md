@@ -369,9 +369,36 @@ Tag 0 text is parsed by a project-owned RFC 3339 reader, not `strptime()`, so th
 - a text string containing U+0000 — no R string holds a NUL, and letting one reach `Rf_mkCharLenCE()` raises a bare `simpleError` that escapes the `zucbor_error` contract;
 - a string longer than `INT_MAX` bytes;
 - a tag number above 2^53;
-- an integer beyond 2^53 with `big_integers = "error"`.
+- an integer beyond 2^53 with `big_integers = "error"`, including a 64-bit typed array element (§6.9);
+- an array dimension above `INT_MAX` (§6.9).
 
 These are the only cases where `cbor_validate()` says `TRUE` and `cbor_decode()` fails, which is rule 2 of §4. The NUL and length guards live in one function, `zu_mkchar()`, the only place a CHARSXP is made, so string values, names and keys cannot drift apart (the `zujson` invariant).
+
+### 6.9 Typed and multi-dimensional arrays (RFC 8746)
+
+Stage 12. Converted under `tags = "convert"`, like the tags of §6.6; a handler wins, and `tags = "keep"` keeps them.
+
+| tag | content | R |
+|---|---|---|
+| 64, 68 (uint8, clamped), 72 (sint8) | bytes | `integer` |
+| 65, 69 (uint16), 73, 77 (sint16) | bytes, big- or little-endian | `integer` |
+| 74, 78 (sint32) | bytes | `integer`; `INT_MIN` is `NA_integer_` |
+| 66, 70 (uint32), 67, 71 (uint64), 75, 79 (sint64) | bytes | `double` while every element is within 2^53, else by `big_integers` (the whole vector) |
+| 80–82, 84–86 (binary16, 32, 64) | bytes | `double`, every bit kept |
+| 83, 87 (binary128) | bytes | `cbor_tag`: no R type holds them |
+| 76 | — | reserved by RFC 8746, so any other tag |
+| 1040 | `[dimensions, elements]`, column-major | `matrix` or `array` |
+| 40 | `[dimensions, elements]`, row-major | the same, reordered into R's column-major order |
+
+Decisions:
+
+- **Unsigned 32-bit is `double`**, by tag, not by value: a vector's type must not depend on whether one element passes `INT_MAX`.
+- **The element size rule is the check's.** A typed array's content is a byte string (the tag-content table of §11) whose length is a whole number of elements (`ZU_ERR_TYPED_ARRAY`, `zucbor_invalid_error`, guard `typed-array-length`).
+- **The shape rule is the check's.** The content of 40 or 1040 is exactly two items: a non-empty, untagged array of unsigned integers, then either an untagged array or one typed array (guard `array-parts`); and the product of the dimensions, saturating, is the number of elements (guard `array-shape`). Both are `ZU_ERR_ARRAY_SHAPE`. The walk tracks this in its frames (`nd_role`), so it costs nothing outside these tags.
+- **A typed array is one item.** It is one CBOR data item, so `max_items` counts it once; what bounds the R allocation is `max_size`, at most 4 R bytes per input byte (uint8 to `integer`), the same bound as an array of small integers.
+- **Byte by byte.** Elements are read and written a byte at a time in the declared order, so the platform's byte order never matters; floats are reassembled from bits with `memcpy()`.
+- A typed array is kind "other" in the lattice of §6.3, and a one-element one is marked `I()`, so it re-encodes as a typed array (§7.6). A matrix's elements lose the `I()`: the `dim` attribute already says it is an array.
+- Elements built by a tag handler that are not a vector of the right length leave the tag a `cbor_tag` holding `list(dimensions, elements)`; a handler's result is copied before `dim` is set on it, since it may be shared.
 
 ---
 
@@ -454,6 +481,16 @@ Stage 10. `as_cbor(x, ...)` is an exported S3 generic. The encoder calls it for 
 - **Map keys are encoded in one pass** (into a buffer owned like the output) so a method on a `cbor_map` key runs once; before Stage 10 a key was encoded twice, once to measure it.
 - Calling R from the encoder longjmps through it on error; the output and key buffers are owned by finalized external pointers (§12), so nothing leaks.
 
+### 7.6 Typed arrays on encode
+
+Stage 12. `cbor_encode(..., typed_arrays = FALSE)`, off by default (roadmap-0.2.0 principle 3, and many decoders do not read RFC 8746). With `TRUE`:
+
+- an `integer` or `double` vector with no class but `AsIs`, written as an array rather than a single value, is tag 78 (sint32) or 86 (binary64), little-endian: every bit kept, `NA_integer_` as `INT_MIN` and `NA_real_` with its payload. A whole double stays a float, so §8's integer rule does not apply inside;
+- a matrix or array of any type is tag 1040, `[dimensions, elements]` in R's own column-major order, the elements a typed array when numeric and a plain array otherwise;
+- vectors with a class (factor, `POSIXct`, `Date`, `cbor_bigint`) keep their usual form.
+
+The plan said "length two or more"; it became "written as an array", so that a decoded one-element typed array, marked `I()`, re-encodes as one. Measured on 10^6 elements (§17): a `double` vector is 8.0 MB against 8.9 MB, encodes in 33 ms against 70 and decodes in 27 ms against 214; an `integer` vector is 4.0 MB against 4.9 MB, 14 ms against 48 and 18 ms against 190.
+
 ---
 
 ## 8. Deterministic encoding
@@ -471,6 +508,8 @@ The encoder is project code, `src/zu_encode.c` (§3 says why not TinyCBOR's). On
 ~~Measure, then write into one exactly sized `RAWSXP`.~~ Since Stage 8 the encoder is one pass into a growing `malloc()` buffer owned by a finalized external pointer (§12), then one copy into a `RAWSXP` of exactly the right size, after which the buffer is freed eagerly: the measuring pass cost as much as the write for nothing a caller can see (§17). Each map's keys are encoded into `R_alloc` scratch, merge-sorted with `memcmp` (shorter-is-smaller on a common prefix, which is what TinyCBOR's own `CborValidateMapIsSorted` checks), and checked for duplicates, so a duplicate key fails before the output is allocated. Because the encoding is deterministic, two keys are equal in value exactly when their bytes are equal: `1L` and `1` are one key. Keys from R names are always text strings, whatever `auto_unbox` says. So `cbor_validate(cbor_encode(x), deterministic = TRUE)` is `TRUE` for every `x` that encodes — a property test (§16).
 
 Float width selection is project code (`zu_float.c`), not TinyCBOR's internal `encode_half()`, which is private to its translation units and selects compiler intrinsics by platform. It is tested exhaustively: all 65,536 half-precision bit patterns must survive double → half, and every width decision is checked against the round-trip `(double)(narrow)x == x`.
+
+Typed arrays (§7.6) are deterministic too: little-endian on every platform, written a byte at a time. They are not part of RFC 8949's deterministic encoding, which says nothing about them, and are off by default.
 
 The bytewise order is RFC 8949's. It is **not** the length-first order of RFC 7049 §3.9, which CTAP2 calls "canonical" (§19).
 
@@ -770,6 +809,17 @@ Encoding meets its target within a few tens of percent; decoding does not, and t
 
 Revised targets, which the numbers above meet and which a regression would miss: decode within 2.5× of zujson on the same data, encode within 1.5×, check phase at most half of decode time. Benchmarks are not in CI; shared runners are too noisy to gate on.
 
+**Typed arrays** (Stage 12, §7.6), 10^6 elements, median of ten on the same machine as the rows above:
+
+| | plain array | typed array (`typed_arrays = TRUE`) |
+|---|---|---|
+| `double`: size | 8.92 MB | 8.00 MB |
+| `double`: encode / decode | 70 ms / 214 ms | 33 ms / 27 ms |
+| `integer`: size | 4.87 MB | 4.00 MB |
+| `integer`: encode / decode | 48 ms / 190 ms | 14 ms / 18 ms |
+
+The decode gain is the check phase's and the build's per-item work disappearing: a typed array is one item.
+
 ---
 
 ## 18. Decisions
@@ -807,6 +857,7 @@ Revised targets, which the numbers above meet and which a regression would miss:
 | 29 | Classes zucbor does not know | Exported S3 generic `as_cbor()`, called once per value (§7.5, Stage 10) |
 | 30 | UUID, IP address, decimal fraction | Recipes in the examples article, not built-in classes (Stage 10) |
 | 31 | CBOR inside binary framing | `cbor_decode_prefix()`: first item checked and decoded, the rest not read (§5, Stage 11) |
+| 32 | RFC 8746 typed arrays | Decoded always (§6.9); encoded only with `typed_arrays = TRUE`, as tags 78, 86 and 1040, little-endian (§7.6, Stage 12) |
 
 ---
 

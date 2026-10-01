@@ -22,6 +22,8 @@
 #' | tag 2, 3 (bignum) | the integer it holds, as for an integer; payloads over 128 bytes stay `cbor_tag` |
 #' | tag 100 (days), tag 1004 (full date) | `Date` |
 #' | tag 55799 (self-describe) | its content |
+#' | tags 64-82, 84-86 (RFC 8746 typed arrays) | `integer` (8- and 16-bit, signed 32-bit) or `double`; 64-bit beyond 2^53 by `big_integers` |
+#' | tags 1040, 40 (multi-dimensional arrays) | `matrix` or `array`, in R's column-major order |
 #' | any other tag | `cbor_tag` |
 #'
 #' An array simplifies to an atomic vector only when its elements agree:

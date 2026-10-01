@@ -37,6 +37,11 @@
  * values. */
 enum { KEY_INT, KEY_FLOAT, KEY_SIMPLE, KEY_BYTES, KEY_TEXT, KEY_ENCODED };
 
+/* A frame's part in an RFC 8746 multi-dimensional array (tags 40, 1040):
+ * the tag's content [dimensions, elements], the dimensions array, or a
+ * plain elements array. */
+enum { ND_NONE, ND_OUTER, ND_DIMS, ND_ELEMS };
+
 typedef struct {
     const uint8_t *ptr;     /* string content, or the key's encoded bytes */
     size_t len;
@@ -54,6 +59,10 @@ typedef struct {
     size_t key_base;            /* this map's first key descriptor */
     int tag_levels;             /* tags wrapping the container */
     uint8_t type;
+    uint8_t nd_role;            /* ND_*: its part in a multi-dimensional array */
+    uint8_t nd_dims_ok, nd_elems_ok;    /* ND_OUTER: both parts seen */
+    uint64_t nd_product;        /* ND_OUTER: product of the dimensions, saturating */
+    uint64_t nd_elems;          /* ND_OUTER: the number of elements */
 } zu_frame;
 
 typedef struct {
@@ -255,7 +264,54 @@ static void element_done(zu_walker *w)
         w->frames[w->sp - 1].count++;
 }
 
-static int open_container(zu_walker *w, CborValue *it, const uint8_t *start, int tags)
+/* ---- multi-dimensional arrays ------------------------------------------------- */
+
+static zu_frame *parent_frame(zu_walker *w)
+{
+    return w->sp ? &w->frames[w->sp - 1] : NULL;
+}
+
+/* The shape rules of RFC 8746 section 3.1, for an element about to be
+ * walked whose parent takes part in a multi-dimensional array. The content
+ * of tag 40 or 1040 is exactly [dimensions, elements]: the dimensions an
+ * untagged, non-empty array of unsigned integers; the elements an untagged
+ * array, or one typed array (Stage 12). The product of the dimensions must
+ * be the number of elements, which close_container() checks. Returns
+ * nonzero on a fault. */
+static int nd_element(zu_walker *w, const CborValue *it, int tags, CborTag tag,
+                      CborType type, const uint8_t *start)
+{
+    zu_frame *p = parent_frame(w);
+    if (!p || p->nd_role == ND_NONE || p->nd_role == ND_ELEMS)
+        return 0;
+    int ok;
+    if (p->nd_role == ND_DIMS)
+        ok = tags == 0 && type == CborIntegerType && !cbor_value_is_negative_integer(it);
+    else if (p->count == 0)
+        ok = tags == 0 && type == CborArrayType;
+    else if (p->count == 1)
+        ok = (tags == 0 && type == CborArrayType) ||
+             (tags == 1 && zu_typed_size(tag) && type == CborByteStringType);
+    else
+        ok = 0;
+    if (!ok)  /* GUARD: array-parts */
+        return fail(w, ZU_ERR_ARRAY_SHAPE, "a multi-dimensional array is not "
+                    "[dimensions, elements] of the kinds RFC 8746 allows", start);
+    return 0;
+}
+
+/* A dimension, multiplied into the product its array's parent keeps. */
+static void nd_dimension(zu_walker *w, uint64_t d)
+{
+    zu_frame *outer = &w->frames[w->sp - 2];
+    if (d && outer->nd_product > UINT64_MAX / d)
+        outer->nd_product = UINT64_MAX;     /* never equals a real count */
+    else
+        outer->nd_product *= d;
+}
+
+static int open_container(zu_walker *w, CborValue *it, const uint8_t *start, int tags,
+                          CborTag tag)
 {
     int is_map = cbor_value_is_map(it);
     if (w->depth + 1 > w->opt->max_depth)  /* GUARD: depth-containers */
@@ -277,6 +333,13 @@ static int open_container(zu_walker *w, CborValue *it, const uint8_t *start, int
     f->type = (uint8_t) cbor_value_get_type(it);
     f->tag_levels = tags;
     f->key_base = w->n_keys;
+    zu_frame *p = parent_frame(w);
+    if (tags && (tag == 40 || tag == 1040)) {
+        f->nd_role = ND_OUTER;
+        f->nd_product = 1;
+    } else if (p && p->nd_role == ND_OUTER) {
+        f->nd_role = p->count == 0 ? ND_DIMS : ND_ELEMS;
+    }
     if (w->plan) {
         if (w->plan->n == w->plan->cap)
             w->plan->counts = (size_t *) grow(w->plan->counts, w->plan->n,
@@ -301,6 +364,25 @@ static int close_container(zu_walker *w, CborValue *top)
             if (check_duplicates(w, f->key_base))
                 return 1;
             w->n_keys = f->key_base;
+        }
+    }
+    if (f->nd_role != ND_NONE) {
+        zu_frame *p = w->sp > 1 ? &w->frames[w->sp - 2] : NULL;
+        if (f->nd_role == ND_DIMS) {
+            if (f->count == 0)
+                return fail(w, ZU_ERR_ARRAY_SHAPE, "a multi-dimensional array has no dimensions",
+                            cbor_value_get_next_byte(&f->it));
+            p->nd_dims_ok = 1;
+        } else if (f->nd_role == ND_ELEMS) {
+            p->nd_elems = f->count;
+            p->nd_elems_ok = 1;
+        } else {
+            int shape_ok = f->count == 2 && f->nd_dims_ok && f->nd_elems_ok
+                           && f->nd_product == f->nd_elems;
+            if (!shape_ok)  /* GUARD: array-shape */
+                return fail(w, ZU_ERR_ARRAY_SHAPE, "the dimensions of a multi-dimensional "
+                            "array do not multiply to its number of elements",
+                            cbor_value_get_next_byte(&f->it));
         }
     }
     if (w->plan)
@@ -398,11 +480,13 @@ static int tag_content_ok(CborTag tag, CborType type)
     case 2: case 3: case 24:
         return type == CborByteStringType;
     case 4: case 5: case 16: case 17: case 18: case 96: case 97: case 98:
+    case 40: case 1040:
         return type == CborArrayType;
     case 100:
         return type == CborIntegerType;
     default:
-        return 1;
+        /* RFC 8746 typed arrays: a byte string. */
+        return !zu_typed_size(tag) || type == CborByteStringType;
     }
 }
 
@@ -447,8 +531,10 @@ static int walk_element(zu_walker *w, CborValue *it)
         return 1;
 
     CborType type = cbor_value_get_type(it);
+    if (nd_element(w, it, tags, tag, type, start))
+        return 1;
     if (type == CborArrayType || type == CborMapType)
-        return open_container(w, it, start, tags);
+        return open_container(w, it, start, tags, tag);
 
     /* A tagged key is compared by its encoded bytes, like a container. */
     zu_key *k = NULL;
@@ -466,6 +552,17 @@ static int walk_element(zu_walker *w, CborValue *it)
             return 1;
         if (bignum && check_bignum(w, content, total, start))
             return 1;
+        int size = tags && type == CborByteStringType ? zu_typed_size(tag) : 0;
+        if (size) {
+            if (total % (size_t) size)  /* GUARD: typed-array-length */
+                return fail(w, ZU_ERR_TYPED_ARRAY, "a typed array's length is not "
+                            "a whole number of elements", start);
+            zu_frame *p = parent_frame(w);
+            if (p && p->nd_role == ND_OUTER) {
+                p->nd_elems = total / (size_t) size;
+                p->nd_elems_ok = 1;
+            }
+        }
         if (k) {
             k->kind = type == CborTextStringType ? KEY_TEXT : KEY_BYTES;
             k->ptr = content;
@@ -474,6 +571,11 @@ static int walk_element(zu_walker *w, CborValue *it)
         break;
     }
     case CborIntegerType:
+        if (w->sp && w->frames[w->sp - 1].nd_role == ND_DIMS) {
+            uint64_t d;
+            cbor_value_get_raw_integer(it, &d);
+            nd_dimension(w, d);
+        }
         if (k) {
             k->kind = KEY_INT;
             k->negative = cbor_value_is_negative_integer(it);

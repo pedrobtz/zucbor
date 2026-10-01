@@ -31,6 +31,7 @@ typedef struct {
     SEXP owner;             /* external pointer owning out; R_NilValue for scratch */
     int max_depth;
     int auto_unbox;
+    int typed_arrays;       /* RFC 8746 for numeric vectors and arrays */
     SEXP call;
     zu_entry **pool;        /* map entry arrays, one per depth, reused */
     R_xlen_t *pool_cap;
@@ -476,6 +477,89 @@ static void encode_element(zu_encoder *e, SEXP x, R_xlen_t i, int depth)
     }
 }
 
+/* ---- typed and multi-dimensional arrays (RFC 8746, Stage 12) ------------------ */
+
+/* An integer or double vector with no class but AsIs: written as a typed
+ * array under typed_arrays = TRUE. A factor, POSIXct or Date keeps its
+ * own form. */
+static int plain_numeric(SEXP x)
+{
+    if (TYPEOF(x) != INTSXP && TYPEOF(x) != REALSXP)
+        return 0;
+    SEXP klass = Rf_getAttrib(x, R_ClassSymbol);
+    return klass == R_NilValue ||
+           (XLENGTH(klass) == 1 && strcmp(CHAR(STRING_ELT(klass, 0)), "AsIs") == 0);
+}
+
+/* Tag 78 (sint32, little-endian) for integer, 86 (binary64, little-endian)
+ * for double: every bit kept, NA_integer_ as INT_MIN and NA_real_ with its
+ * payload. Byte by byte, so a big-endian platform writes the same bytes.
+ * depth is the tag's level. */
+static void put_typed(zu_encoder *e, SEXP x, int depth)
+{
+    check_depth(e, depth);
+    int real = TYPEOF(x) == REALSXP;
+    int size = real ? 8 : 4;
+    R_xlen_t n = XLENGTH(x);
+    put_head(e, 6, real ? 86 : 78);
+    put_head(e, 2, (uint64_t) n * (uint64_t) size);
+    uint8_t buf[4096];
+    size_t at = 0;
+    for (R_xlen_t i = 0; i < n; i++) {
+        uint64_t v;
+        if (real) {
+            memcpy(&v, &REAL(x)[i], sizeof v);
+        } else {
+            v = (uint32_t) INTEGER(x)[i];
+        }
+        for (int k = 0; k < size; k++)
+            buf[at++] = (uint8_t)(v >> (8 * k));
+        if (at == sizeof buf) {
+            put(e, buf, at);
+            at = 0;
+        }
+    }
+    put(e, buf, at);
+}
+
+static int has_dim(SEXP x)
+{
+    return Rf_getAttrib(x, R_DimSymbol) != R_NilValue;
+}
+
+/* Tag 1040, [dimensions, elements], for an R matrix or array: R's order is
+ * the column-major one, so the elements are written as they are. depth is
+ * the tag's level; the dimensions and elements are two below it. */
+static void put_ndarray(zu_encoder *e, SEXP x, int depth)
+{
+    SEXP dim = PROTECT(Rf_getAttrib(x, R_DimSymbol));
+    if (TYPEOF(dim) != INTSXP)
+        fail_encode(e, ZU_ERR_INVALID_VALUE, "a dim attribute is not an integer vector");
+    check_depth(e, depth + 2);
+    put_head(e, 6, 1040);
+    put_head(e, 4, 2);
+    put_head(e, 4, (uint64_t) XLENGTH(dim));
+    for (R_xlen_t k = 0; k < XLENGTH(dim); k++) {
+        int d = INTEGER(dim)[k];
+        if (d == NA_INTEGER || d < 0)
+            fail_encode(e, ZU_ERR_INVALID_VALUE, "a dim attribute has a negative or missing value");
+        put_head(e, 0, (uint64_t) d);
+    }
+    UNPROTECT(1);
+    R_xlen_t n = XLENGTH(x);
+    if (plain_numeric(x)) {
+        put_typed(e, x, depth + 2);
+    } else if (TYPEOF(x) == VECSXP) {
+        put_head(e, 4, (uint64_t) n);
+        for (R_xlen_t i = 0; i < n; i++)
+            encode(e, VECTOR_ELT(x, i), depth + 3);
+    } else {
+        put_head(e, 4, (uint64_t) n);
+        for (R_xlen_t i = 0; i < n; i++)
+            encode_element(e, x, i, depth + 3);
+    }
+}
+
 static int unboxed(const zu_encoder *e, SEXP x)
 {
     return e->auto_unbox && XLENGTH(x) == 1 && !is_class(x, "AsIs");
@@ -583,8 +667,16 @@ static void encode_value(zu_encoder *e, SEXP x, int depth, int may_convert)
             return;
         }
         UNPROTECT(1);
+        if (e->typed_arrays && has_dim(x)) {
+            put_ndarray(e, x, depth);
+            return;
+        }
         if (unboxed(e, x)) {
             encode_element(e, x, 0, depth);
+            return;
+        }
+        if (e->typed_arrays && plain_numeric(x)) {
+            put_typed(e, x, depth);
             return;
         }
         check_depth(e, depth);
@@ -618,6 +710,10 @@ static void encode_value(zu_encoder *e, SEXP x, int depth, int may_convert)
         if (is_class(x, "POSIXlt"))
             fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE, "POSIXlt has no CBOR form; use as.POSIXct()");
         R_xlen_t n = XLENGTH(x);
+        if (e->typed_arrays && has_dim(x)) {
+            put_ndarray(e, x, depth);
+            return;
+        }
         SEXP names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
         check_depth(e, depth);
         if (check_names(e, names, n)) {
@@ -671,7 +767,7 @@ static void grow_output(zu_encoder *e, size_t need)
 
 SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call, SEXP ns)
 {
-    if (TYPEOF(opts) != INTSXP || XLENGTH(opts) != 4)
+    if (TYPEOF(opts) != INTSXP || XLENGTH(opts) != 5)
         Rf_error("zucbor_encode: arguments must be validated in R");
     const int *o = INTEGER(opts);
     int sequence = o[0];
@@ -680,6 +776,7 @@ SEXP zucbor_encode(SEXP x, SEXP opts, SEXP call, SEXP ns)
     e.auto_unbox = o[1];
     int self_describe = o[2];
     e.max_depth = o[3];
+    e.typed_arrays = o[4];
     e.call = call;
     e.ns = ns;
     if (TYPEOF(ns) != ENVSXP)

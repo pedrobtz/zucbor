@@ -96,7 +96,7 @@ CBOR often sits inside binary framing. A WebAuthn `authData` puts a COSE key in 
 
 ## Stage 12 — Typed arrays (RFC 8746) · M
 
-**Status:** not started.
+**Status:** done, 2026-10-01 (#32). Design §6.9, §7.6, §17; decision 32.
 
 A numeric vector of a million elements is a million CBOR items today. RFC 8746 writes it as one tagged byte string, which is what R's numeric, integer and matrix data most need, and its tag 1040 is exactly R's column-major layout.
 
@@ -121,6 +121,14 @@ A numeric vector of a million elements is a million CBOR items today. RFC 8746 w
 - Big-endian and little-endian inputs decode to the same R value.
 - The mutation check covers the length and shape guards, and `fuzz_check`'s seeds gain typed arrays.
 - A benchmark records size and speed against plain arrays for 10^6 doubles.
+**What actually happened**
+
+- The proposed decisions held, with two refinements. A vector is written as a typed array whenever it would be written as an array, not only from length two: a decoded one-element typed array is marked `I()` and must re-encode as one. And a matrix of any type becomes tag 1040, with a plain elements array when it is not numeric, which RFC 8746 allows; the plan named only numeric ones.
+- The check gained three guards, `typed-array-length`, `array-parts` and `array-shape`, each with a mutation case. The shape rule lives in the walk's frames: a frame records whether it is the content of tag 40 or 1040, its dimensions or its elements, and the product is checked when the content closes, saturating so that no product of huge dimensions can wrap round to the element count. The first `array-shape` guard spanned two lines, which the mutation tool's single-line edit cannot disable; it was rewritten rather than the tool loosened.
+- A typed array counts as one item for `max_items`. `max_size` still bounds what R allocates, at four R bytes per input byte at worst (uint8 to `integer`), as for an array of small integers.
+- A dimension above `INT_MAX` is a new `zucbor_unrepresentable` case (`ZU_ERR_DIMENSION`), raised in the build, since the CBOR is valid.
+- A tag handler for the elements of a matrix is honoured: its result becomes the matrix if it is a vector of the right length, copied first since a handler may return a shared object, and otherwise the tag stays a `cbor_tag`.
+- Benchmark (§17): for 10^6 doubles, 8.0 MB against 8.9 MB, encoding 2× and decoding 8× faster; for integers, 3.5× and 10×.
 
 ---
 

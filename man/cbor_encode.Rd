@@ -5,9 +5,21 @@
 \alias{cbor_encode_seq}
 \title{Encode R values as CBOR}
 \usage{
-cbor_encode(x, auto_unbox = TRUE, self_describe = FALSE, max_depth = 256L)
+cbor_encode(
+  x,
+  auto_unbox = TRUE,
+  self_describe = FALSE,
+  max_depth = 256L,
+  typed_arrays = FALSE
+)
 
-cbor_encode_seq(x, auto_unbox = TRUE, self_describe = FALSE, max_depth = 256L)
+cbor_encode_seq(
+  x,
+  auto_unbox = TRUE,
+  self_describe = FALSE,
+  max_depth = 256L,
+  typed_arrays = FALSE
+)
 }
 \arguments{
 \item{x}{An R value. For \code{cbor_encode_seq()}, a list whose elements are
@@ -23,6 +35,10 @@ tag 55799 (\verb{d9 d9 f7}), which marks bytes as CBOR.}
 \item{max_depth}{Deepest nesting to write, counting arrays, maps and tags
 as \code{\link[=cbor_decode]{cbor_decode()}} does, so its output always decodes at the same
 \code{max_depth}.}
+
+\item{typed_arrays}{If \code{TRUE}, write numeric vectors, matrices and arrays
+as RFC 8746 typed arrays: see "Typed arrays". Off by default, since many
+decoders do not read them.}
 }
 \value{
 A raw vector.
@@ -70,6 +86,23 @@ numbers, functions, environments, external pointers, S4 objects,
 \code{POSIXlt} (convert with \code{\link[=as.POSIXct]{as.POSIXct()}}) and data frames. Names that are
 partly missing, \code{NA} or empty are \code{zucbor_invalid_argument}, and two keys
 that encode identically are \code{zucbor_duplicate_key}.
+}
+
+\section{Typed arrays}{
+
+With \code{typed_arrays = TRUE}, an \code{integer} or \code{double} vector that would be
+written as an array (not a single value) is one tagged byte string
+instead of one item per element: tag 78 (32-bit signed integers) or tag
+86 (64-bit floats), little-endian on every platform. Every bit is kept:
+\code{NA_integer_} is written as the smallest 32-bit integer, which decodes to
+\code{NA_integer_} again, and \code{NA_real_}, \code{NaN} and \code{-0} keep their bits. A
+whole double stays a float, unlike in an array. A matrix or array, of any
+type, is tag 1040: its dimensions and its elements in R's column-major
+order, the elements a typed array when they are numeric. Vectors with a
+class, such as factors and dates, are written as without the option.
+
+For 10^6 doubles, a typed array is 8 MB against 9 MB as an array, and is
+written and read several times faster.
 }
 
 \section{Conversions that do not round-trip}{

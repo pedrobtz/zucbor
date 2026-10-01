@@ -13,6 +13,11 @@
 * `cbor_decode_prefix()` decodes the item a raw vector starts with and
   reports how many bytes it used, for CBOR inside binary framing such as
   WebAuthn `authData`. What follows the item is not read.
+* RFC 8746 typed arrays decode to integer and double vectors, and
+  multi-dimensional arrays (tags 40 and 1040) to matrices and arrays.
+  `cbor_encode(typed_arrays = TRUE)` writes numeric vectors as typed arrays
+  and matrices as tag 1040: smaller, and much faster to read and write.
+  Off by default, so existing output is unchanged.
 * `tag_handlers =` in the decoders gives meaning to any tag: a function per
   tag number turns its decoded content into an R value. Handlers run only
   after the whole input has been checked, and an error in one is

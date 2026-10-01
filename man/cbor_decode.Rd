@@ -100,6 +100,8 @@ a length header cannot make R allocate for data the input does not hold.
    tag 2, 3 (bignum) \tab the integer it holds, as for an integer; payloads over 128 bytes stay \code{cbor_tag} \cr
    tag 100 (days), tag 1004 (full date) \tab \code{Date} \cr
    tag 55799 (self-describe) \tab its content \cr
+   tags 64-82, 84-86 (RFC 8746 typed arrays) \tab \code{integer} (8- and 16-bit, signed 32-bit) or \code{double}; 64-bit beyond 2^53 by \code{big_integers} \cr
+   tags 1040, 40 (multi-dimensional arrays) \tab \code{matrix} or \code{array}, in R's column-major order \cr
    any other tag \tab \code{cbor_tag} \cr
 }
 

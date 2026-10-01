@@ -78,6 +78,20 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
 #define ZU_ERR_KEY_COLLISION        "ZU_ERR_KEY_COLLISION"
 #define ZU_ERR_UNSUPPORTED_TYPE     "ZU_ERR_UNSUPPORTED_TYPE"
 #define ZU_ERR_INVALID_VALUE        "ZU_ERR_INVALID_VALUE"
+#define ZU_ERR_TYPED_ARRAY          "ZU_ERR_TYPED_ARRAY"
+#define ZU_ERR_ARRAY_SHAPE          "ZU_ERR_ARRAY_SHAPE"
+#define ZU_ERR_DIMENSION            "ZU_ERR_DIMENSION"
+
+/* The element size in bytes of an RFC 8746 typed array tag (64-87, but not
+ * the reserved 76), or 0 for any other tag. Bits 0b010fsell: f float, s
+ * signed, e little-endian, ll the size, 8 << ll bits for an integer and
+ * 16 << ll for a float. */
+static inline int zu_typed_size(uint64_t tag)
+{
+    if (tag < 64 || tag > 87 || tag == 76)
+        return 0;
+    return (tag & 16) ? 2 << (tag & 3) : 1 << (tag & 3);
+}
 
 /* zu_status.c: the enumerator name of a CborError, or NULL for a value no
  * enumerator has; and every status a fault can carry, for R's class map. */

@@ -381,6 +381,8 @@ Each is phase 2 in §2, an open question in §19, or permanently out of scope. N
 
 ## After v1
 
+**0.2.0 is planned in [roadmap-0.2.0.md](roadmap-0.2.0.md)** (Stages 10–16): tag handlers and an `as_cbor()` generic, prefix decoding, RFC 8746 typed arrays, an annotated hex dump, data frames, and item-by-item sequence reading, chosen from a survey of Python's and Node's CBOR libraries.
+
 1. The first real consumer — likely `zuhttp`'s `application/cbor` support or `zucrypt`'s COSE — and whatever it shows the API gets wrong. 1.0.0 follows that.
-2. Data frames, once SenML users ask (§19 Q3).
+2. Data frames, once SenML users ask (§19 Q3); planned as Stage 14.
 3. A C API, if and only if item 1 needs one (§19 Q6).

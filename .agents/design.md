@@ -776,9 +776,9 @@ Revised targets, which the numbers above meet and which a regression would miss:
 
 ## 19. Open questions
 
-1. **CTAP2 canonical order.** CTAP2 requires RFC 7049 length-first key order; RFC 8949 deterministic encoding is bytewise. They differ (e.g. `24` versus `-1`). Decoding CTAP2 data needs nothing, since signatures cover bytes, not re-encodings. An authenticator emulator would need a `key_order` argument. Add it when a caller asks.
-2. **UUID and URI tags.** Converting 37 to a `cbor_uuid` class and 32 to a character vector, or leaving both as `cbor_tag`. Decide on use.
-3. **Data frames.** Encode row-oriented as `zujson` does, and decode arrays of text-keyed maps opt-in. Deferred to keep v1's mapping small; SenML users are the likely askers.
+1. **CTAP2 canonical order.** CTAP2 requires RFC 7049 length-first key order; RFC 8949 deterministic encoding is bytewise. They differ (e.g. `24` versus `-1`). Decoding CTAP2 data needs nothing, since signatures cover bytes, not re-encodings. An authenticator emulator would need a `key_order` argument. Add it when a caller asks. Deferred again in [roadmap-0.2.0.md](roadmap-0.2.0.md).
+2. **UUID and URI tags.** Converting 37 to a `cbor_uuid` class and 32 to a character vector, or leaving both as `cbor_tag`. Decide on use. Proposed answer in [roadmap-0.2.0.md](roadmap-0.2.0.md) Stage 10: neither, but a `tag_handlers` argument and documented recipes.
+3. **Data frames.** Encode row-oriented as `zujson` does, and decode arrays of text-keyed maps opt-in. Deferred to keep v1's mapping small; SenML users are the likely askers. Planned as Stage 14 of [roadmap-0.2.0.md](roadmap-0.2.0.md).
 4. ~~**Validation offsets.**~~ Closed at Stage 8: UTF-8 and tag content are checked by the walk and have offsets; only deterministic-encoding faults, from TinyCBOR's validator, have `offset = NA`. Validating per item from the walk would recover it at some cost to throughput. Measure first.
 5. **The bignum conversion cap** (128 bytes, §6.6). Revisit if a protocol uses larger integers as numbers rather than as opaque bytes.
 6. **A C API for siblings.** `zucrypt` (COSE signing) or `zuhttp` (`application/cbor`) may want CBOR from C. Design it only once one of them has a concrete need, following `zukomp`'s registered-table pattern (`zujson` §15).

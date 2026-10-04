@@ -99,3 +99,29 @@ annotation_bytes <- function(a) {
   starts <- cumsum(c(0, nchar(hex) / 2))[seq_along(hex)]
   list(bytes = paste(hex, collapse = ""), offsets_ok = identical(offsets, starts))
 }
+
+# Every item of a sequence, as cbor_read_seq(each =) passes them, read from
+# raw bytes in blocks of `block` (growing with an incomplete item).
+read_each <- function(x, ..., block = 65536) {
+  con <- rawConnection(x)
+  on.exit(close(con))
+  got <- list()
+  n <- zucbor:::zu_read_each(con, function(item) got[length(got) + 1L] <<- list(item),
+                             64 * 1024^2, NULL, ..., block = block)
+  stopifnot(n == length(got))
+  got
+}
+
+# What zucbor_decode() says of x in stream mode (3): the complete items it
+# starts with, and where the first incomplete or faulty one starts.
+stream_check <- function(x) {
+  a <- zucbor:::zu_seq_args()
+  .Call(zucbor:::zucbor_decode, x, a$opts, a$max_items, NULL, a$handlers)
+}
+
+# An open raw connection over x, closed when the calling test ends.
+local_raw_con <- function(x, env = parent.frame()) {
+  con <- rawConnection(x)
+  withr::defer(close(con), envir = env)
+  con
+}

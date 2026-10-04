@@ -672,6 +672,25 @@ static int walk_item(zu_walker *w, CborValue *top)
     }
 }
 
+/* A fault in the item at pos. A stream stops before the item without one
+ * when the input ends inside it, since more input may complete it -- every
+ * item's head and content are read through TinyCBOR, which reports running
+ * out of input as CborErrorUnexpectedEOF, and the walk reports a length the
+ * rest cannot hold the same way -- or when items before it are delivered
+ * first; the next read starts at it and reports its fault. */
+static int stream_stop(zu_walker *w, size_t pos)
+{
+    if (!w->opt->stream)
+        return 1;
+    if (strcmp(w->fault->status, "CborErrorUnexpectedEOF") != 0
+        && (!w->plan || w->plan->n_items == 0))
+        return 1;
+    w->fault->status = NULL;
+    if (w->plan)
+        w->plan->consumed = pos;
+    return 0;
+}
+
 int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
              zu_plan *plan, zu_fault *fault)
 {
@@ -702,19 +721,21 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
     while (pos < len) {
         CborParser parser;
         CborValue it;
+        if (opt->stream)
+            w.items = 0;        /* max_items is per item */
         CborError err = cbor_parser_init(buf + pos, len - pos, 0, &parser, &it);
         if (err)
-            return fail_cbor(&w, err, buf + pos);
+            fail_cbor(&w, err, buf + pos);
         CborValue start = it;
-        if (walk_item(&w, &it))
-            return 1;
         /* Deterministic encoding is the one check left to TinyCBOR, and
          * it reports no position (design section 10). */
-        if (opt->deterministic) {
+        if (!err && !walk_item(&w, &it) && opt->deterministic) {
             err = cbor_value_validate(&start, ZU_VALIDATE_FLAGS);
             if (err)
-                return fail_cbor(&w, err, NULL);
+                fail_cbor(&w, err, NULL);
         }
+        if (fault->status)
+            return stream_stop(&w, pos);
         pos = (size_t)(cbor_value_get_next_byte(&it) - buf);
         if (plan) {
             plan->n_items++;

@@ -49,7 +49,8 @@ Design principle:
 | Diagnostic notation (`cbor_diagnose()`) | yes, output only, as RFC 8949 Appendix A writes it | | parsing diagnostic notation |
 | Data frames | | row-oriented, as `zujson` | |
 | CTAP2 canonical key order (length-first) | | yes, if a caller needs it (§19) | as the default |
-| Streaming / incremental decode | | | yes — see §9 |
+| Reading a sequence item by item (`cbor_read_seq(each =)`) | yes (Stage 15) | | |
+| Incremental decoding of a single item | | | yes — see §9 |
 | Public C API / static archive | | only once a caller exists | |
 | Base64 / base64url, COSE crypto, CDDL validation | | | yes — other packages' concerns |
 
@@ -114,7 +115,7 @@ cbor_decode(x, ...)          # raw -> R value; exactly one data item
 cbor_decode_seq(x, ...)      # raw -> list; an RFC 8742 sequence of zero or more items
 cbor_decode_prefix(x, ...)   # raw -> list(value, consumed); the item x starts with (Stage 11)
 cbor_read(file, ...)         # path or connection -> R value
-cbor_read_seq(file, ...)     # path or connection -> list
+cbor_read_seq(file, ...)     # path or connection -> list; with each =, item by item (Stage 15)
 cbor_validate(x, sequence = FALSE, ..., error = FALSE)  # raw -> TRUE/FALSE; the check phase only
 cbor_diagnose(x, sequence = FALSE, ...)  # raw -> character(1), RFC 8949 §8 diagnostic notation
 cbor_annotate(x, sequence = FALSE, ...)  # raw -> cbor_annotation: annotated hex dump (Stage 13)
@@ -524,6 +525,8 @@ The bytewise order is RFC 8949's. It is **not** the length-first order of RFC 70
 
 `cbor_read()` takes a path, a URL or a connection, and reads **at most `max_size + 1` bytes** with `readBin()` in 64 KiB blocks, so an oversized or endless source fails with `zucbor_size_limit` having read one byte past the limit, not after exhausting memory. The path/URL/connection resolution is `zuxml`'s `R/zu_source.R` (`zu_open_input()`), copied verbatim with its origin line, following its conventions: an unopened connection is opened `"rb"` and closed on exit; an open one must already be binary and is left open.
 
+**Reading a sequence item by item** (Stage 15). `cbor_read_seq(file, ..., each = f)` passes each item to `f` as soon as its last byte has been read, keeps nothing, and returns the number of items. This is not incremental decoding: each item is checked whole before anything is built from it, exactly as by `cbor_decode()`, so the rule above holds per item. The buffer holds at most `max_size` bytes, the item being read and what the last block brought of the next ones, so `max_size` bounds one item and memory is bounded by the largest item, not the stream. `max_items` applies per item too. The check runs in a fourth mode, *stream*: a sequence that stops at the first item that is not complete and good. An item the input ends inside is left for the next read without a fault, which is how truncation is told from malformation: every head and string is read through TinyCBOR, which reports running out of input as `CborErrorUnexpectedEOF`, and the walk's length-header guard reports a length the rest cannot hold the same way; any other fault is the item's own. A faulty item is reported only when it comes first, so `f` has seen every item before it, and its offset is counted from the start of the read. When the input ends inside an item, the rest is checked as a plain sequence, which reports the truncation with its offset. The block size doubles with an incomplete item, so a large item costs linear time. The fuzz target checks that every proper prefix of an item that passes is truncation, that a sequence that passes streams to its end, and that a stream stops only where a sequence check of the rest would.
+
 The read loop is in R, not C. `zuxml`'s C connection reader uses `R_GetConnection()` / `R_ReadConnection()`, which are experimental API and cost a NOTE on R 4.5's check. Whole-buffer decoding gains nothing from reading in C, so `zucbor` does not copy `src/zu_source.h`.
 
 ---
@@ -575,9 +578,9 @@ Threat model: **the input is hostile**, and so is anything a peer can influence 
 
 | Limit | Default | Enforced |
 |---|---|---|
-| `max_size` | 64 MiB | before the check phase; while reading in `cbor_read()` |
+| `max_size` | 64 MiB | before the check phase; while reading in `cbor_read()`; per item with `cbor_read_seq(each =)` |
 | `max_depth` | 256, at most 1023 | check phase, at each container or tag entry |
-| `max_items` | 1e6 | check phase, per data item, including every string chunk |
+| `max_items` | 1e6 | check phase, per data item, including every string chunk; summed over a sequence, except per top-level item with `cbor_read_seq(each =)` |
 
 **Depth counts containers and tags, not values.** The root array is level 1; a scalar inside it is no level of its own; a tag is one level. The encoder charges depth identically, so `cbor_encode()` cannot emit what `cbor_decode()` at the same `max_depth` refuses — output the package will not read back is the worst bug shape available (`zujson` §9).
 
@@ -848,7 +851,7 @@ The decode gain is the check phase's and the build's per-item work disappearing:
 | 17 | `Date` on encode | tag 1004 |
 | 18 | `POSIXct` on encode | tag 1 |
 | 19 | Limit defaults | §11 table; `max_depth` ≤ 1023 |
-| 20 | Streaming decode | never; whole-buffer only |
+| 20 | Streaming decode | never for one item: each item is checked whole. A sequence is read item by item with `cbor_read_seq(each =)` (§9, Stage 15) |
 | 21 | Scratch memory | `R_alloc` only; TinyCBOR allocates nothing |
 | 22 | C API | none in v1 |
 | 24 | Encoder | Project code, not TinyCBOR's (§3, §8) |

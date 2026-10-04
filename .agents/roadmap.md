@@ -520,7 +520,7 @@ The one refusal of Stages 0–9 that was scope rather than impossibility (§7.3,
 
 ## Stage 15 — Reading a sequence item by item · M
 
-**Status:** not started.
+**Status:** done, 2026-10-04 (#35). Design §9, §11; decision 20.
 
 `cbor_read_seq()` reads the whole source, bounded by `max_size`. A long telemetry log should be readable in constant memory.
 
@@ -533,6 +533,15 @@ The one refusal of Stages 0–9 that was scope rather than impossibility (§7.3,
 - 10^6 items from a connection are read in memory bounded by the largest item.
 - An interrupt during the read unwinds cleanly.
 - A malformed item stops the read with its offset in the stream.
+
+**What actually happened**
+
+- The proposed decisions held. The check gained a fourth mode, *stream*, beside one item, a sequence and a prefix: a sequence that stops at the first item that is not complete and good, and resets the item count per item. An item the input ends inside is left for the next read without a fault. A faulty one is reported only when it comes first, so `each` has seen every item before it; the next read starts at it and reports it.
+- **Truncation is `CborErrorUnexpectedEOF`, and nothing else.** Every head and string is read through TinyCBOR, which reports running out of input that way, and the walk's length-header guard already reported a length the rest cannot hold the same way. No other check fails on a partial item: maps are checked for duplicates, and multi-dimensional arrays for shape, only once they close. A test cuts every Appendix A item at every byte, and the fuzz target checks every proper prefix of every item that passes (three cuts past 64 bytes).
+- An input that ends inside an item, at the end of the read, is checked as a plain sequence, which reports the truncation with its offset. Offsets count from the start of the read.
+- `max_size` bounds the buffer, so it bounds one item and the stream is unbounded. A length header no item within `max_size` could satisfy reads `max_size` bytes and stops with `zucbor_size_limit`, as `cbor_read()` does.
+- The block size doubles while an item is incomplete, so reading a large item costs linear time, not quadratic. 10^6 nine-byte items read in about 0.5 s with the default 64 KiB blocks, and in about 1.5 s with `max_size = 256`, which the test uses to prove the bound.
+- The fuzz target gained three invariants: a sequence that passes streams to its end; a stream that stops at c leaves the first c bytes a sequence that passes, and the rest streams no further; and every proper prefix of an item that passes is truncation.
 
 ---
 
@@ -560,6 +569,7 @@ The one refusal of Stages 0–9 that was scope rather than impossibility (§7.3,
 | Length-first key order (CTAP2's "canonical") | Decoding CTAP2 data needs nothing: signatures cover bytes, not re-encodings (§19 Q1) | Someone emulating an authenticator |
 | Strictness switches (`reject_undefined`, `allow_nan`, …) | Stage 10's handlers and `deterministic = TRUE` cover the cases seen so far | A protocol that must refuse one specific construct |
 | Built-in UUID, IP address, decimal and complex conversion | Stage 10 makes each a recipe of a few lines | Enough repeated recipes to justify a class |
+| Using `zufast` for half floats, UTF-8, tag 0 date-times, base64/hex and UUIDs (#41) | A CRAN package cannot `LinkingTo` a GitHub-only one. zucbor already has its own half floats, UTF-8 check, tag 0 date-times and big-endian reads, so for zucbor it is a refactor, not missing functionality | `zufast` 0.1.0 on CRAN |
 
 ## Not planned
 

@@ -11,7 +11,7 @@ void zu_arena_reset(void);
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-    zu_check_opts opt = {ZU_MAX_DEPTH_CAP, UINT64_MAX, 1, 0, 1, 0};
+    zu_check_opts opt = {ZU_MAX_DEPTH_CAP, UINT64_MAX, 1, 0, 1, 0, 0};
     zu_fault fault;
     int ok = zu_check(data, size, &opt, NULL, &fault) == 0 && size > 0;
     zu_arena_reset();

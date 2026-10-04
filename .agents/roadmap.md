@@ -348,6 +348,31 @@ The core. Everything after it relies on what this stage guarantees.
 
 Writing it out found one criterion (7) that nothing checks mechanically, and one (9) met only as far as the nightly fuzzing has run. Both are stated as such rather than claimed.
 
+**Stages 10–15, each exit criterion with what verifies it** (2026-10-04, Stage 16). The §20 criteria above still hold over the wider package: the new input paths go through the same check phase, and the same CI jobs, fuzz target and mutation check cover them.
+
+| Stage | Exit criterion | Verified by |
+|---|---|---|
+| 10 | Handlers for tags 0, 37 and 4 round-trip through `as_cbor()` methods | `test-handlers.R` ("handlers and methods round-trip tags 0, 37 and 4"); the recipes in the examples article |
+| 10 | A handler that errors, one returning a huge value, and one calling `cbor_decode()` again with its own limits | `test-handlers.R` |
+| 10 | gctorture, rchk, UBSan and ASan clean over the handler path; the interrupt test passes with a handler | `native-checks.yaml`, with handlers in `tools/sanitizer-exercise.R`; `test-interrupt.R` ("an interrupt while tag handlers run") |
+| 10, 12, 14 | The cross-platform encoding fixture is unchanged | `test-encode.R`, the same 645 bytes as at Stage 8, on every CI platform |
+| 11 | The WebAuthn vignette reads `authData`'s credential key with `cbor_decode_prefix()` | `vignettes/cose-webauthn.Rmd`, built by `R CMD check` and `pkgdown.yaml` |
+| 11 | Trailing garbage, trailing CBOR, an exact fit, and every Appendix A example with random bytes appended | `test-prefix.R`; two prefix invariants in `fuzz_check` |
+| 12 | R → CBOR → R identical for numeric vectors, matrices and arrays, `NA`, `NaN`, `-0` and infinities included; little-endian typed arrays a fixed point | `test-typed-arrays.R` |
+| 12 | Big- and little-endian inputs decode alike | `test-typed-arrays.R` ("every integer typed array decodes, in either byte order") |
+| 12 | Mutation cases for the length and shape guards; fuzz seeds with typed arrays | `tools/run-mutation-check` (`typed-array-length`, `array-parts`, `array-shape`); `tools/fuzz-seeds.R` |
+| 12 | Size and speed against plain arrays for 10^6 doubles | design §7.6 and §17, from `tools/run-benchmarks` |
+| 13 | Every Appendix A example annotates with each byte exactly once | `test-annotate.R`, over Appendix A and every unique item of the COSE corpus |
+| 13 | A COSE message reads correctly in the examples article | `vignettes/articles/examples.Rmd` ("Where each byte goes") |
+| 14 | Data frames round-trip modulo row names, factor levels and column order | `test-data-frame.R`; the losses are rows of design §7.4 |
+| 14 | `max_cells` refuses a quadratic input before allocating | `test-data-frame.R`: 5000 rows sharing no keys refused, and the boundary pinned at exactly `max_cells` |
+| 14 | A SenML example decodes to a frame in the examples article | `vignettes/articles/examples.Rmd` ("Telemetry as a data frame"); `test-data-frame.R` |
+| 15 | 10^6 items read in memory bounded by the largest item | `test-read-each.R`, with `max_size = 256` bounding the buffer (skipped on CRAN and under gctorture) |
+| 15 | An interrupt during the read unwinds cleanly | `test-read-each.R`: the connection is closed and the file reads again |
+| 15 | A malformed item stops the read with its offset in the stream | `test-read-each.R`: every Appendix F example after three good items, against `cbor_decode_seq()`'s class and offset; every cut of every Appendix A item is truncation; three stream invariants in `fuzz_check` |
+
+As for Stages 0–8, criterion 9's *sustained* fuzzing is met as the nightly runs accrue, now over the stream mode too.
+
 ---
 
 ## Widening v1: Stages 10–16
@@ -556,7 +581,7 @@ The one refusal of Stages 0–9 that was scope rather than impossibility (§7.3,
 
 ## Stage 16 — Release 0.1.0 · S
 
-**Status:** not started.
+**Status:** ready for the human steps, 2026-10-04 (#36): `NEWS.md` lists Stages 0–15, Stage 9's table covers Stages 10–15, and `cran-comments.md` is current. What remains is below.
 
 - `NEWS.md` lists every addition under one heading (it already does, Stages 0–13).
 - Stage 9's acceptance table gains rows for Stages 10–15, each naming what verifies it.

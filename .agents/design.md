@@ -135,7 +135,7 @@ as_cbor(x, ...)              # S3 generic cbor_encode() calls for a class it doe
 zucbor_info()                # TinyCBOR version, compiled limits, defaults
 ```
 
-Thirteen functions in 0.1.0, sixteen with `as_cbor()`, `cbor_decode_prefix()` and `cbor_annotate()`, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
+Sixteen functions: thirteen from Stages 0–9, and `as_cbor()`, `cbor_decode_prefix()` and `cbor_annotate()` from Stages 10–13, plus `print`, `format` and `as.character` methods for the four classes, `length` for `cbor_map`, and `as.numeric` and `[` for `cbor_bigint`.
 
 **Why `decode`/`encode`, not `parse`/`write`.** The siblings' verbs are for text formats. RFC 8949 speaks of encoders and decoders, and so do the protocols this package serves; a user reading COSE code in another language will look for those words.
 
@@ -478,7 +478,7 @@ What *does* round-trip is stated as a property and tested as one (§16): for any
 Stage 10. `as_cbor(x, ...)` is an exported S3 generic. The encoder calls it for an object none of whose classes it knows: anything but `POSIXct`, `Date`, `factor`, `data.frame`, `POSIXlt` and zucbor's four classes. `AsIs` neither counts as known nor asks for a call, so `I(x)` of a class with a method is converted. A method returns something the encoder knows, typically a `cbor_tag()`; with `tag_handlers` on the decoder it makes a class round-trip without zucbor knowing it.
 
 - **Once per value.** The result is written as it is, even if its class is again unknown, though its elements are each converted in turn. So no chain of methods can loop, and nothing needs counting.
-- **The default returns `x`**, and a result identical to `x` (the same object) is encoded as its underlying type: 0.1.0's rule, unchanged. A different object *of the same class* is refused with `zucbor_unsupported_type`: it is most likely a method that forgot to convert.
+- **The default returns `x`**, and a result identical to `x` (the same object) is encoded as its underlying type: Stage 4's rule, unchanged. A different object *of the same class* is refused with `zucbor_unsupported_type`: it is most likely a method that forgot to convert.
 - **Errors in a method propagate unchanged.** It is the caller's own code, called on the caller's own data, unlike a tag handler, which runs on untrusted input.
 - **Determinism** is the method's to keep: the encoder cannot see what a method depends on. The documentation says a method should depend on nothing but `x`.
 - **Map keys are encoded in one pass** (into a buffer owned like the output) so a method on a `cbor_map` key runs once; before Stage 10 a key was encoded twice, once to measure it.
@@ -486,7 +486,7 @@ Stage 10. `as_cbor(x, ...)` is an exported S3 generic. The encoder calls it for 
 
 ### 7.6 Typed arrays on encode
 
-Stage 12. `cbor_encode(..., typed_arrays = FALSE)`, off by default (roadmap-0.2.0 principle 3, and many decoders do not read RFC 8746). With `TRUE`:
+Stage 12. `cbor_encode(..., typed_arrays = FALSE)`, off by default (roadmap principle 10, and many decoders do not read RFC 8746). With `TRUE`:
 
 - an `integer` or `double` vector with no class but `AsIs`, written as an array rather than a single value, is tag 78 (sint32) or 86 (binary64), little-endian: every bit kept, `NA_integer_` as `INT_MIN` and `NA_real_` with its payload. A whole double stays a float, so §8's integer rule does not apply inside;
 - a matrix or array of any type is tag 1040, `[dimensions, elements]` in R's own column-major order, the elements a typed array when numeric and a plain array otherwise;
@@ -866,9 +866,9 @@ The decode gain is the check phase's and the build's per-item work disappearing:
 
 ## 19. Open questions
 
-1. **CTAP2 canonical order.** CTAP2 requires RFC 7049 length-first key order; RFC 8949 deterministic encoding is bytewise. They differ (e.g. `24` versus `-1`). Decoding CTAP2 data needs nothing, since signatures cover bytes, not re-encodings. An authenticator emulator would need a `key_order` argument. Add it when a caller asks. Deferred again in [roadmap-0.2.0.md](roadmap-0.2.0.md).
+1. **CTAP2 canonical order.** CTAP2 requires RFC 7049 length-first key order; RFC 8949 deterministic encoding is bytewise. They differ (e.g. `24` versus `-1`). Decoding CTAP2 data needs nothing, since signatures cover bytes, not re-encodings. An authenticator emulator would need a `key_order` argument. Add it when a caller asks. Deferred again in [roadmap.md](roadmap.md) (Stages 10–16).
 2. ~~**UUID and URI tags.**~~ Closed at Stage 10: neither becomes a class. `tag_handlers` and `as_cbor()` let a caller convert any tag, and the examples article carries recipes for UUIDs, IP addresses and decimal fractions. Decision 30.
-3. **Data frames.** Encode row-oriented as `zujson` does, and decode arrays of text-keyed maps opt-in. Deferred to keep v1's mapping small; SenML users are the likely askers. Planned as Stage 14 of [roadmap-0.2.0.md](roadmap-0.2.0.md).
+3. **Data frames.** Encode row-oriented as `zujson` does, and decode arrays of text-keyed maps opt-in. Deferred to keep v1's mapping small; SenML users are the likely askers. Planned as Stage 14 of [roadmap.md](roadmap.md), inside v1.
 4. ~~**Validation offsets.**~~ Closed at Stage 8: UTF-8 and tag content are checked by the walk and have offsets; only deterministic-encoding faults, from TinyCBOR's validator, have `offset = NA`. Validating per item from the walk would recover it at some cost to throughput. Measure first.
 5. **The bignum conversion cap** (128 bytes, §6.6). Revisit if a protocol uses larger integers as numbers rather than as opaque bytes.
 6. **A C API for siblings.** `zucrypt` (COSE signing) or `zuhttp` (`application/cbor`) may want CBOR from C. Design it only once one of them has a concrete need, following `zukomp`'s registered-table pattern (`zujson` §15).

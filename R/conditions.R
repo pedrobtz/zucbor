@@ -36,8 +36,8 @@
 #'     `tag_handlers` raised an error. The condition carries `tag`, the tag
 #'     number, and `parent`, the error the handler raised.}
 #'   \item{`zucbor_limit_error`}{A limit was reached. The subclasses
-#'     `zucbor_depth_limit`, `zucbor_size_limit` and `zucbor_item_limit` name
-#'     which one.}
+#'     `zucbor_depth_limit`, `zucbor_size_limit`, `zucbor_item_limit` and
+#'     `zucbor_cell_limit` name which one.}
 #' }
 #'
 #' A condition raised while checking input carries `offset`, the 0-based
@@ -108,6 +108,7 @@ zu_status_class <- local({
     ZU_ERR_DEPTH_LIMIT = c("zucbor_depth_limit", "zucbor_limit_error"),
     ZU_ERR_ITEM_LIMIT = c("zucbor_item_limit", "zucbor_limit_error"),
     ZU_ERR_SIZE_LIMIT = c("zucbor_size_limit", "zucbor_limit_error"),
+    ZU_ERR_CELL_LIMIT = c("zucbor_cell_limit", "zucbor_limit_error"),
     CborErrorDataTooLarge = "zucbor_limit_error",
     ZU_ERR_INVALID_DATE = invalid,
     ZU_ERR_TYPED_ARRAY = invalid,
@@ -153,6 +154,8 @@ zu_fault_message <- function(fault, class) {
                                format(fault$limit_value, scientific = FALSE), " data items", at),
     zucbor_size_limit = paste0("CBOR input is larger than max_size = ",
                                format(fault$limit_value, scientific = FALSE), " bytes"),
+    zucbor_cell_limit = paste0("a data frame would have more than max_cells = ",
+                               format(fault$limit_value, scientific = FALSE), " cells", at),
     paste0("CBOR error", at, detail)
   )
 }

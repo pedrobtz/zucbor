@@ -617,6 +617,79 @@ static SEXP convert(zu_encoder *e, SEXP x)
 
 static void encode_value(zu_encoder *e, SEXP x, int depth, int may_convert);
 
+/* A data frame as an array of one map per row, keyed by column name (design
+ * section 7.7), as zujson writes one. Every row has the same keys, so they
+ * are sorted once. A cell is what its column's element would be in a
+ * vector, and a list column's cell is encoded as a value; row names are
+ * dropped. A column of a class this encoder does not know goes through
+ * as_cbor() whole, once. depth is the array's level. */
+static void put_frame(zu_encoder *e, SEXP x, int depth)
+{
+    R_xlen_t ncol = XLENGTH(x);
+    SEXP rn = PROTECT(Rf_getAttrib(x, R_RowNamesSymbol));
+    R_xlen_t nrow = rn == R_NilValue ? 0 : XLENGTH(rn);
+    SEXP names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
+    if (ncol && !check_names(e, names, ncol))
+        fail_encode(e, ZU_ERR_INVALID_VALUE, "a data frame's columns must have names");
+    SEXP cols = PROTECT(Rf_allocVector(VECSXP, ncol));
+    for (R_xlen_t j = 0; j < ncol; j++) {
+        SEXP col = VECTOR_ELT(x, j);
+        if (wants_conversion(col)) {
+            col = convert(e, col);
+            if (!Rf_isVectorAtomic(col) && TYPEOF(col) != VECSXP)
+                fail_encode(e, ZU_ERR_INVALID_VALUE,
+                            "as_cbor() for a data frame column must return a vector");
+        }
+        SET_VECTOR_ELT(cols, j, col);
+        if (is_class(col, "data.frame") || has_dim(col))
+            fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE,
+                        "a data frame column that is a matrix or a data frame has no CBOR form");
+        if (XLENGTH(col) != nrow)
+            fail_encode(e, ZU_ERR_INVALID_VALUE, "a data frame column is not as long as the frame");
+        if (is_class(col, "POSIXlt"))
+            fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE, "POSIXlt has no CBOR form; use as.POSIXct()");
+        if (TYPEOF(col) == RAWSXP || TYPEOF(col) == CPLXSXP)
+            fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE,
+                        TYPEOF(col) == RAWSXP ? "a raw data frame column has no CBOR form; use a list of raw vectors"
+                                              : "complex numbers have no CBOR form");
+    }
+
+    zu_entry *entries = (zu_entry *) R_alloc((size_t) ncol + 1, sizeof(zu_entry));
+    for (R_xlen_t j = 0; j < ncol; j++) {
+        SEXP nm = STRING_ELT(names, j);
+        if (Rf_getCharCE(nm) == CE_BYTES)
+            fail_encode(e, ZU_ERR_INVALID_VALUE, "a string marked as \"bytes\" has no text encoding");
+        const char *u = Rf_translateCharUTF8(nm);
+        entries[j].key = (const uint8_t *) u;
+        entries[j].key_len = strlen(u);
+        entries[j].index = j;
+        if (!zu_utf8_valid(entries[j].key, entries[j].key_len))
+            fail_encode(e, ZU_ERR_INVALID_VALUE, "a name is not valid UTF-8");
+    }
+    sort_entries(entries, ncol, text_cmp);
+    for (R_xlen_t j = 1; j < ncol; j++)
+        if (text_cmp(&entries[j - 1], &entries[j]) == 0)
+            fail_encode(e, ZU_ERR_DUPLICATE_KEY, "two map keys encode identically");
+
+    check_depth(e, depth);
+    put_head(e, 4, (uint64_t) nrow);
+    if (nrow)
+        check_depth(e, depth + 1);
+    for (R_xlen_t r = 0; r < nrow; r++) {
+        put_head(e, 5, (uint64_t) ncol);
+        for (R_xlen_t j = 0; j < ncol; j++) {
+            SEXP col = VECTOR_ELT(cols, entries[j].index);
+            put_head(e, 3, entries[j].key_len);
+            put(e, entries[j].key, entries[j].key_len);
+            if (TYPEOF(col) == VECSXP)
+                encode(e, VECTOR_ELT(col, r), depth + 2);
+            else
+                encode_element(e, col, r, depth + 2);
+        }
+    }
+    UNPROTECT(3);
+}
+
 static void encode(zu_encoder *e, SEXP x, int depth)
 {
     encode_value(e, x, depth, 1);
@@ -705,8 +778,10 @@ static void encode_value(zu_encoder *e, SEXP x, int depth, int may_convert)
             put_map(e, keys, R_NilValue, values, XLENGTH(keys), depth + 1);
             return;
         }
-        if (is_class(x, "data.frame"))
-            fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE, "data frames are not encoded in this version; convert to a list");
+        if (is_class(x, "data.frame")) {
+            put_frame(e, x, depth);
+            return;
+        }
         if (is_class(x, "POSIXlt"))
             fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE, "POSIXlt has no CBOR form; use as.POSIXct()");
         R_xlen_t n = XLENGTH(x);

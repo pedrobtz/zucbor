@@ -23,6 +23,7 @@
 #' | `cbor_map`, `cbor_tag`, `cbor_simple` | a map, a tagged item, a simple value |
 #' | unnamed list or vector | array |
 #' | fully named list or vector | map with text keys |
+#' | data frame | array of maps, one per row, keyed by column name |
 #'
 #' A length-one atomic vector is a single value, not an array, unless it is
 #' wrapped in [I()] or `auto_unbox = FALSE`. A matrix is a flat array in
@@ -37,9 +38,19 @@
 #'
 #' These have no CBOR form and raise `zucbor_unsupported_type`: complex
 #' numbers, functions, environments, external pointers, S4 objects,
-#' `POSIXlt` (convert with [as.POSIXct()]) and data frames. Names that are
-#' partly missing, `NA` or empty are `zucbor_invalid_argument`, and two keys
-#' that encode identically are `zucbor_duplicate_key`.
+#' `POSIXlt` (convert with [as.POSIXct()]), and data frame columns that are
+#' matrices, data frames or raw vectors. Names that are partly missing, `NA`
+#' or empty are `zucbor_invalid_argument`, and two keys that encode
+#' identically are `zucbor_duplicate_key`.
+#'
+#' @section Data frames:
+#' A data frame is written row by row, as `zujson` writes one: an array of
+#' maps, each keyed by the column names, so `data.frame(a = 1:2)` is
+#' `[{"a": 1}, {"a": 2}]`. A cell is written as the same element of its
+#' column would be in a vector, `NA` as `null`, and a list column's cell as
+#' a value of its own. Row names are dropped. A column of a class zucbor
+#' does not know goes through [as_cbor()] whole, once. `cbor_decode(x,
+#' data_frame = TRUE)` reads such an array back as a data frame.
 #'
 #' @section Typed arrays:
 #' With `typed_arrays = TRUE`, an `integer` or `double` vector that would be
@@ -60,7 +71,9 @@
 #' Decoding what `cbor_encode()` wrote gives back the value, except that:
 #' `NA` comes back as `NULL`, or `NA` of the vector's type; a whole double
 #' comes back as an integer; `list(1L)` and `1L` both encode as `1`;
-#' `NaN` payloads are not kept; and fractional days of a `Date` are dropped.
+#' `NaN` payloads are not kept; fractional days of a `Date` are dropped; and
+#' a data frame comes back, with `data_frame = TRUE`, without its row names,
+#' with factors as text, and with its columns in the encoded key order.
 #'
 #' @param x An R value. For `cbor_encode_seq()`, a list whose elements are
 #'   encoded one after another as an RFC 8742 CBOR sequence.

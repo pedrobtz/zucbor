@@ -122,9 +122,11 @@ zu_seq_args <- function(simplify = c("preserve", "none"),
                         big_integers = c("bigint", "double", "error"),
                         duplicate_keys = FALSE, deterministic = FALSE,
                         max_depth = 256L, max_items = 1e6,
-                        tag_handlers = NULL, call = NULL) {
+                        tag_handlers = NULL, data_frame = FALSE,
+                        max_cells = 1e7, call = NULL) {
   zu_decode_args(3L, simplify, map_keys, tags, big_integers, duplicate_keys,
-                 deterministic, max_depth, 1, max_items, tag_handlers, call)
+                 deterministic, max_depth, 1, max_items, tag_handlers,
+                 data_frame, max_cells, call)
 }
 
 # Reads at most max_size + 1 bytes: one past the limit is enough to know the

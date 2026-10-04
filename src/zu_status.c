@@ -71,6 +71,7 @@ static const char *const own_statuses[] = {
     ZU_ERR_TYPED_ARRAY,
     ZU_ERR_ARRAY_SHAPE,
     ZU_ERR_DIMENSION,
+    ZU_ERR_CELL_LIMIT,
 };
 
 #define N_OWN_STATUSES (sizeof own_statuses / sizeof own_statuses[0])

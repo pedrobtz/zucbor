@@ -153,8 +153,10 @@ test_that("tags and simple values", {
 })
 
 test_that("values with no CBOR form are refused", {
+  matrix_column <- data.frame(a = 1)
+  matrix_column$m <- matrix(1:2, 1)
   bad <- list(1i, function() 1, globalenv(), as.POSIXlt("2024-01-01", tz = "UTC"),
-              data.frame(a = 1), quote(x), list(1, sum))
+              matrix_column, quote(x), list(1, sum))
   for (x in bad) {
     expect_error(cbor_encode(x), class = "zucbor_unsupported_type", info = class(x)[1])
   }

@@ -38,8 +38,8 @@ data frame.}
 \code{tag_handlers} raised an error. The condition carries \code{tag}, the tag
 number, and \code{parent}, the error the handler raised.}
 \item{\code{zucbor_limit_error}}{A limit was reached. The subclasses
-\code{zucbor_depth_limit}, \code{zucbor_size_limit} and \code{zucbor_item_limit} name
-which one.}
+\code{zucbor_depth_limit}, \code{zucbor_size_limit}, \code{zucbor_item_limit} and
+\code{zucbor_cell_limit} name which one.}
 }
 
 A condition raised while checking input carries \code{offset}, the 0-based

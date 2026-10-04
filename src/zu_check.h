@@ -90,6 +90,7 @@ int zu_check(const uint8_t *buf, size_t len, const zu_check_opts *opt,
 #define ZU_ERR_TYPED_ARRAY          "ZU_ERR_TYPED_ARRAY"
 #define ZU_ERR_ARRAY_SHAPE          "ZU_ERR_ARRAY_SHAPE"
 #define ZU_ERR_DIMENSION            "ZU_ERR_DIMENSION"
+#define ZU_ERR_CELL_LIMIT           "ZU_ERR_CELL_LIMIT"
 
 /* The element size in bytes of an RFC 8746 typed array tag (64-87, but not
  * the reserved 76), or 0 for any other tag. Bits 0b010fsell: f float, s

@@ -11,7 +11,13 @@
 * R-hub containers matching CRAN's r-devel-linux-x86_64-debian-gcc (GCC 16)
   and -debian-clang (clang 23, `-std=gnu23`) flavours.
 * Native-code checks on every change: ASan and UBSan (gcc and clang),
-  valgrind, gctorture, rchk and LTO.
+  valgrind, gctorture, rchk and LTO; libFuzzer on the input checker.
+
+## Tests
+
+The tests take about 15 seconds under `R CMD check`. One, which reads a
+million items from a file to show that memory stays bounded, is skipped on
+CRAN.
 
 ## Bundled code
 

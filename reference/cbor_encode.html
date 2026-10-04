@@ -115,7 +115,7 @@ decoders do not read them.</p></dd>
     <div class="section level2">
     <h2 id="r-to-cbor">R to CBOR<a class="anchor" aria-label="anchor" href="#r-to-cbor"></a></h2>
 
-<table class="table table"><tr><td>R</td><td>CBOR</td></tr><tr><td><code>NULL</code>, <code>NA</code> of any type</td><td><code>null</code></td></tr><tr><td><code>TRUE</code>, <code>FALSE</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td><code>integer</code></td><td>integer</td></tr><tr><td><code>double</code>, whole, within CBOR's integer range, not <code>-0</code></td><td>integer</td></tr><tr><td>any other <code>double</code>, including <code>NaN</code>, <code>Inf</code> and <code>-0</code></td><td>float, shortest exact width</td></tr><tr><td><code>character</code></td><td>text string, UTF-8</td></tr><tr><td><code>raw</code></td><td>one byte string, whatever its length</td></tr><tr><td><code>factor</code></td><td>its labels, as text</td></tr><tr><td><code>POSIXct</code></td><td>tag 1: whole seconds as an integer, else a float</td></tr><tr><td><code>Date</code></td><td>tag 1004 <code>"YYYY-MM-DD"</code>; tag 100 (days) outside years 0000-9999</td></tr><tr><td><code>cbor_bigint</code></td><td>integer, or tag 2 or 3 beyond CBOR's integer range</td></tr><tr><td><code>cbor_map</code>, <code>cbor_tag</code>, <code>cbor_simple</code></td><td>a map, a tagged item, a simple value</td></tr><tr><td>unnamed list or vector</td><td>array</td></tr><tr><td>fully named list or vector</td><td>map with text keys</td></tr></table><p>A length-one atomic vector is a single value, not an array, unless it is
+<table class="table table"><tr><td>R</td><td>CBOR</td></tr><tr><td><code>NULL</code>, <code>NA</code> of any type</td><td><code>null</code></td></tr><tr><td><code>TRUE</code>, <code>FALSE</code></td><td><code>true</code>, <code>false</code></td></tr><tr><td><code>integer</code></td><td>integer</td></tr><tr><td><code>double</code>, whole, within CBOR's integer range, not <code>-0</code></td><td>integer</td></tr><tr><td>any other <code>double</code>, including <code>NaN</code>, <code>Inf</code> and <code>-0</code></td><td>float, shortest exact width</td></tr><tr><td><code>character</code></td><td>text string, UTF-8</td></tr><tr><td><code>raw</code></td><td>one byte string, whatever its length</td></tr><tr><td><code>factor</code></td><td>its labels, as text</td></tr><tr><td><code>POSIXct</code></td><td>tag 1: whole seconds as an integer, else a float</td></tr><tr><td><code>Date</code></td><td>tag 1004 <code>"YYYY-MM-DD"</code>; tag 100 (days) outside years 0000-9999</td></tr><tr><td><code>cbor_bigint</code></td><td>integer, or tag 2 or 3 beyond CBOR's integer range</td></tr><tr><td><code>cbor_map</code>, <code>cbor_tag</code>, <code>cbor_simple</code></td><td>a map, a tagged item, a simple value</td></tr><tr><td>unnamed list or vector</td><td>array</td></tr><tr><td>fully named list or vector</td><td>map with text keys</td></tr><tr><td>data frame</td><td>array of maps, one per row, keyed by column name</td></tr></table><p>A length-one atomic vector is a single value, not an array, unless it is
 wrapped in <code><a href="https://rdrr.io/r/base/AsIs.html" class="external-link">I()</a></code> or <code>auto_unbox = FALSE</code>. A matrix is a flat array in
 column-major order. An object whose class zucbor does not know goes
 through <code><a href="as_cbor.html">as_cbor()</a></code> first, so a method can say how to write it; without
@@ -126,9 +126,21 @@ value from the integer a COSE algorithm identifier needs. So <code>1L</code> and
 encode identically.</p>
 <p>These have no CBOR form and raise <code>zucbor_unsupported_type</code>: complex
 numbers, functions, environments, external pointers, S4 objects,
-<code>POSIXlt</code> (convert with <code><a href="https://rdrr.io/r/base/as.POSIXlt.html" class="external-link">as.POSIXct()</a></code>) and data frames. Names that are
-partly missing, <code>NA</code> or empty are <code>zucbor_invalid_argument</code>, and two keys
-that encode identically are <code>zucbor_duplicate_key</code>.</p>
+<code>POSIXlt</code> (convert with <code><a href="https://rdrr.io/r/base/as.POSIXlt.html" class="external-link">as.POSIXct()</a></code>), and data frame columns that are
+matrices, data frames or raw vectors. Names that are partly missing, <code>NA</code>
+or empty are <code>zucbor_invalid_argument</code>, and two keys that encode
+identically are <code>zucbor_duplicate_key</code>.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="data-frames">Data frames<a class="anchor" aria-label="anchor" href="#data-frames"></a></h2>
+
+
+<p>A data frame is written row by row, as <code>zujson</code> writes one: an array of
+maps, each keyed by the column names, so <code>data.frame(a = 1:2)</code> is
+<code>[{"a": 1}, {"a": 2}]</code>. A cell is written as the same element of its
+column would be in a vector, <code>NA</code> as <code>null</code>, and a list column's cell as
+a value of its own. Row names are dropped. A column of a class zucbor
+does not know goes through <code><a href="as_cbor.html">as_cbor()</a></code> whole, once. <code>cbor_decode(x, data_frame = TRUE)</code> reads such an array back as a data frame.</p>
     </div>
     <div class="section level2">
     <h2 id="typed-arrays">Typed arrays<a class="anchor" aria-label="anchor" href="#typed-arrays"></a></h2>
@@ -154,7 +166,9 @@ written and read several times faster.</p>
 <p>Decoding what <code>cbor_encode()</code> wrote gives back the value, except that:
 <code>NA</code> comes back as <code>NULL</code>, or <code>NA</code> of the vector's type; a whole double
 comes back as an integer; <code>list(1L)</code> and <code>1L</code> both encode as <code>1</code>;
-<code>NaN</code> payloads are not kept; and fractional days of a <code>Date</code> are dropped.</p>
+<code>NaN</code> payloads are not kept; fractional days of a <code>Date</code> are dropped; and
+a data frame comes back, with <code>data_frame = TRUE</code>, without its row names,
+with factors as text, and with its columns in the encoded key order.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

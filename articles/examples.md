@@ -394,31 +394,64 @@ cbor_decode(hex("d8 18 44 82 01 61 61"),
 
 ## Telemetry as a data frame
 
-Sensors often send records one after another as an RFC 8742 sequence.
-Records with the same text keys become named lists, and a data frame is
-one step away:
+Sensor data often arrives as an array of records with text keys. SenML
+(RFC 8428) is the standard shape: each record carries a name, a value
+and a time, and the first may carry a base name and base time for the
+rest. `data_frame = TRUE` makes such an array a data frame, one row per
+record:
 
 ``` r
 
-readings <- lapply(1:5, function(i) list(sensor = paste0("t", i %% 2), c = 20 + i / 4, ok = i != 3))
-stream <- cbor_encode_seq(readings)
-length(stream)
-#> [1] 98
-
-records <- cbor_decode_seq(stream)
-do.call(rbind, lapply(records, as.data.frame))
-#>       c    ok sensor
-#> 1 20.25  TRUE     t1
-#> 2 20.50  TRUE     t0
-#> 3 20.75 FALSE     t1
-#> 4 21.00  TRUE     t0
-#> 5 21.25  TRUE     t1
+pack <- list(
+  list(bn = "urn:dev:ow:10e2073a01080063:", bt = 1320067464, n = "voltage", u = "V", v = 120.1),
+  list(n = "current", t = -5L, u = "A", v = 1.2),
+  list(n = "current", t = -4L, u = "A", v = 1.3)
+)
+bytes <- cbor_encode(pack)
+senml <- cbor_decode(bytes, data_frame = TRUE)
+senml
+#>         n u     v                           bn         bt  t
+#> 1 voltage V 120.1 urn:dev:ow:10e2073a01080063: 1320067464 NA
+#> 2 current A   1.2                         <NA>         NA -5
+#> 3 current A   1.3                         <NA>         NA -4
 ```
 
-The columns come back as `c`, `ok`, `sensor`, not in the order the lists
-were built: deterministic encoding writes map keys sorted by their
-encoded bytes, shorter keys first, and decoding keeps the order it
-reads. Select columns by name when order matters.
+The columns are every key any record has, in the order they are first
+seen, and a record without a key has `NA` there. Each column simplifies
+as an array would, so `v` is numeric and `n` is text. With the base
+values filled in, the times are absolute:
+
+``` r
+
+senml$name <- paste0(senml$bn[1], senml$n)
+as.POSIXct(senml$bt[1] + ifelse(is.na(senml$t), 0, senml$t), tz = "UTC")
+#> [1] "2011-10-31 13:24:24 UTC" "2011-10-31 13:24:19 UTC"
+#> [3] "2011-10-31 13:24:20 UTC"
+```
+
+The columns come back as `n`, `u`, `v`, `bn`, `bt`, then `t`, which only
+the later records have: deterministic encoding writes each map’s keys
+sorted by their encoded bytes, shorter keys first, and decoding keeps
+the order it first reads them in. Select columns by name when order
+matters.
+
+A data frame encodes the same way, one map per row, so frames
+round-trip, apart from row names, factor levels and column order:
+
+``` r
+
+df <- data.frame(sensor = c("t0", "t1"), c = c(20.25, 20.5), ok = c(TRUE, NA))
+cbor_diagnose(cbor_encode(df))
+#> [1] "[{\"c\": 20.25, \"ok\": true, \"sensor\": \"t0\"}, {\"c\": 20.5, \"ok\": null, \"sensor\": \"t1\"}]"
+cbor_decode(cbor_encode(df), data_frame = TRUE)
+#>       c   ok sensor
+#> 1 20.25 TRUE     t0
+#> 2 20.50   NA     t1
+```
+
+Records that share no keys would make a frame with as many columns as
+rows, so `max_cells` (ten million by default) bounds the cells of any
+one frame, and is checked before the frame is built.
 
 ## Numeric data as typed arrays
 
@@ -469,6 +502,23 @@ cbor_read(path)     # keys in encoded order: "tags" is shorter than "version"
 
 tryCatch(cbor_read(path, max_size = 8), zucbor_limit_error = function(e) e$limit)
 #> [1] "max_size"
+unlink(path)
+```
+
+A long log of records, written as an RFC 8742 sequence, can be read one
+record at a time in memory bounded by the largest record. Each is
+checked whole, decoded and passed to `each` as soon as its last byte is
+read, and the limits apply to each record rather than the whole file:
+
+``` r
+
+path <- tempfile(fileext = ".cbor")
+writeBin(cbor_encode_seq(lapply(1:1000, function(i) list(i = i, v = i / 8))), path)
+total <- 0
+cbor_read_seq(path, each = function(r) total <<- total + r$v, max_size = 64)
+#> [1] 1000
+total
+#> [1] 62562.5
 unlink(path)
 ```
 

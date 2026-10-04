@@ -21,7 +21,9 @@ cbor_decode_prefix(
   max_depth = 256L,
   max_size = 64 * 1024^2,
   max_items = 1e+06,
-  tag_handlers = NULL
+  tag_handlers = NULL,
+  data_frame = FALSE,
+  max_cells = 1e+07
 )
 ```
 
@@ -83,6 +85,17 @@ cbor_decode_prefix(
 
   `NULL`, or a list of functions of one argument, named by tag number,
   such as `list("37" = function(value) ...)`. See "Tag handlers".
+
+- data_frame:
+
+  If `TRUE`, an array whose elements are all maps with text keys becomes
+  a data frame. See "Data frames".
+
+- max_cells:
+
+  With `data_frame = TRUE`, the most cells (rows times columns) one data
+  frame may have, or `Inf`. Checked before the frame is allocated: rows
+  that share no keys make a frame quadratic in the input.
 
 ## Value
 

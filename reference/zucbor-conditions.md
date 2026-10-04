@@ -59,7 +59,8 @@ class below inherits from `zucbor_error`.
 - `zucbor_limit_error`:
 
   A limit was reached. The subclasses `zucbor_depth_limit`,
-  `zucbor_size_limit` and `zucbor_item_limit` name which one.
+  `zucbor_size_limit`, `zucbor_item_limit` and `zucbor_cell_limit` name
+  which one.
 
 A condition raised while checking input carries `offset`, the 0-based
 byte offset of the item at fault, or `NA` when the validator that found

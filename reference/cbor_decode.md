@@ -21,7 +21,9 @@ cbor_decode(
   max_depth = 256L,
   max_size = 64 * 1024^2,
   max_items = 1e+06,
-  tag_handlers = NULL
+  tag_handlers = NULL,
+  data_frame = FALSE,
+  max_cells = 1e+07
 )
 
 cbor_decode_seq(
@@ -35,7 +37,9 @@ cbor_decode_seq(
   max_depth = 256L,
   max_size = 64 * 1024^2,
   max_items = 1e+06,
-  tag_handlers = NULL
+  tag_handlers = NULL,
+  data_frame = FALSE,
+  max_cells = 1e+07
 )
 ```
 
@@ -99,6 +103,17 @@ cbor_decode_seq(
   `NULL`, or a list of functions of one argument, named by tag number,
   such as `list("37" = function(value) ...)`. See "Tag handlers".
 
+- data_frame:
+
+  If `TRUE`, an array whose elements are all maps with text keys becomes
+  a data frame. See "Data frames".
+
+- max_cells:
+
+  With `data_frame = TRUE`, the most cells (rows times columns) one data
+  frame may have, or `Inf`. Checked before the frame is allocated: rows
+  that share no keys make a frame quadratic in the input.
+
 ## Value
 
 The decoded value; for `cbor_decode_seq()`, a list with one element per
@@ -119,6 +134,7 @@ item.
 | array | atomic vector when the elements agree, else `list` |
 | map with non-empty, unique text keys | named `list` |
 | any other map | `cbor_map` (by `map_keys`) |
+| array of maps with non-empty, unique text keys | `data.frame`, with `data_frame = TRUE` |
 | tag 0 (date/time text), tag 1 (epoch) | `POSIXct`, UTC |
 | tag 2, 3 (bignum) | the integer it holds, as for an integer; payloads over 128 bytes stay `cbor_tag` |
 | tag 100 (days), tag 1004 (full date) | `Date` |
@@ -167,6 +183,26 @@ that calls `cbor_decode()` again, for CBOR embedded in a byte string,
 passes that call its own limits.
 [`as_cbor()`](https://pedrobtz.github.io/zucbor/reference/as_cbor.md) is
 the encoding half.
+
+## Data frames
+
+With `data_frame = TRUE`, an array whose elements are all maps that
+decode to named lists – every key a non-empty text string, none twice –
+becomes a data frame, one row per map, as
+[`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+writes one. Its columns are the union of the maps' keys, in the order
+they are first seen; a key a row lacks is missing there, as `null` is.
+Each column simplifies as an array of its cells would, so a column of
+numbers is numeric and a column of mixed values is a list (in which a
+missing cell is `NULL`). An empty array stays `logical(0)`, and an array
+holding anything other than such maps decodes as usual.
+
+Rows that share no keys make a frame with as many columns as rows, so
+the cell count is checked against `max_cells` before the frame is
+allocated, and a frame over it is `zucbor_cell_limit`.
+
+    # SenML (RFC 8428): a pack of records.
+    cbor_decode(x, data_frame = TRUE)
 
 ## See also
 

@@ -32,6 +32,10 @@
   `cbor_encode(typed_arrays = TRUE)` writes numeric vectors as typed
   arrays and matrices as tag 1040: smaller, and much faster to read and
   write. Off by default, so existing output is unchanged.
+- Data frames encode as an array of one map per row, keyed by column
+  name, and `data_frame = TRUE` in the decoders reads such an array
+  (SenML, for instance) back as a data frame. `max_cells` bounds the
+  cells of a decoded frame before it is built.
 - `cbor_read_seq(each =)` reads a sequence of any length in memory
   bounded by its largest item: each item is checked whole, decoded and
   passed to a function as soon as its last byte arrives. The limits then

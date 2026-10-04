@@ -67,7 +67,9 @@ a length header cannot make R allocate for data the input does not hold.</p>
 <span>  max_depth <span class="op">=</span> <span class="fl">256L</span>,</span>
 <span>  max_size <span class="op">=</span> <span class="fl">64</span> <span class="op">*</span> <span class="fl">1024</span><span class="op">^</span><span class="fl">2</span>,</span>
 <span>  max_items <span class="op">=</span> <span class="fl">1e+06</span>,</span>
-<span>  tag_handlers <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  tag_handlers <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  data_frame <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  max_cells <span class="op">=</span> <span class="fl">1e+07</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">cbor_decode_seq</span><span class="op">(</span></span>
@@ -81,7 +83,9 @@ a length header cannot make R allocate for data the input does not hold.</p>
 <span>  max_depth <span class="op">=</span> <span class="fl">256L</span>,</span>
 <span>  max_size <span class="op">=</span> <span class="fl">64</span> <span class="op">*</span> <span class="fl">1024</span><span class="op">^</span><span class="fl">2</span>,</span>
 <span>  max_items <span class="op">=</span> <span class="fl">1e+06</span>,</span>
-<span>  tag_handlers <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  tag_handlers <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  data_frame <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  max_cells <span class="op">=</span> <span class="fl">1e+07</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -149,6 +153,17 @@ chunk of an indefinite-length string, or <code>Inf</code>.</p></dd>
 by tag number, such as <code>list("37" = function(value) ...)</code>. See "Tag
 handlers".</p></dd>
 
+
+<dt id="arg-data-frame">data_frame<a class="anchor" aria-label="anchor" href="#arg-data-frame"></a></dt>
+<dd><p>If <code>TRUE</code>, an array whose elements are all maps with
+text keys becomes a data frame. See "Data frames".</p></dd>
+
+
+<dt id="arg-max-cells">max_cells<a class="anchor" aria-label="anchor" href="#arg-max-cells"></a></dt>
+<dd><p>With <code>data_frame = TRUE</code>, the most cells (rows times
+columns) one data frame may have, or <code>Inf</code>. Checked before the frame is
+allocated: rows that share no keys make a frame quadratic in the input.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -158,7 +173,7 @@ element per item.</p>
     <div class="section level2">
     <h2 id="cbor-to-r">CBOR to R<a class="anchor" aria-label="anchor" href="#cbor-to-r"></a></h2>
 
-<table class="table table"><tr><td>CBOR</td><td>R</td></tr><tr><td>integer</td><td><code>integer</code> if it fits, else <code>double</code> up to 2^53, else by <code>big_integers</code></td></tr><tr><td>float (half, single, double)</td><td><code>double</code>, exactly</td></tr><tr><td><code>false</code> / <code>true</code></td><td><code>logical</code></td></tr><tr><td><code>null</code>, <code>undefined</code></td><td><code>NULL</code>, or <code>NA</code> inside an atomic vector</td></tr><tr><td>byte string</td><td><code>raw</code></td></tr><tr><td>text string</td><td><code>character</code>, UTF-8</td></tr><tr><td>other simple value</td><td><code>cbor_simple</code></td></tr><tr><td>array</td><td>atomic vector when the elements agree, else <code>list</code></td></tr><tr><td>map with non-empty, unique text keys</td><td>named <code>list</code></td></tr><tr><td>any other map</td><td><code>cbor_map</code> (by <code>map_keys</code>)</td></tr><tr><td>tag 0 (date/time text), tag 1 (epoch)</td><td><code>POSIXct</code>, UTC</td></tr><tr><td>tag 2, 3 (bignum)</td><td>the integer it holds, as for an integer; payloads over 128 bytes stay <code>cbor_tag</code></td></tr><tr><td>tag 100 (days), tag 1004 (full date)</td><td><code>Date</code></td></tr><tr><td>tag 55799 (self-describe)</td><td>its content</td></tr><tr><td>tags 64-82, 84-86 (RFC 8746 typed arrays)</td><td><code>integer</code> (8- and 16-bit, signed 32-bit) or <code>double</code>; 64-bit beyond 2^53 by <code>big_integers</code></td></tr><tr><td>tags 1040, 40 (multi-dimensional arrays)</td><td><code>matrix</code> or <code>array</code>, in R's column-major order</td></tr><tr><td>any other tag</td><td><code>cbor_tag</code></td></tr></table><p>An array simplifies to an atomic vector only when its elements agree:
+<table class="table table"><tr><td>CBOR</td><td>R</td></tr><tr><td>integer</td><td><code>integer</code> if it fits, else <code>double</code> up to 2^53, else by <code>big_integers</code></td></tr><tr><td>float (half, single, double)</td><td><code>double</code>, exactly</td></tr><tr><td><code>false</code> / <code>true</code></td><td><code>logical</code></td></tr><tr><td><code>null</code>, <code>undefined</code></td><td><code>NULL</code>, or <code>NA</code> inside an atomic vector</td></tr><tr><td>byte string</td><td><code>raw</code></td></tr><tr><td>text string</td><td><code>character</code>, UTF-8</td></tr><tr><td>other simple value</td><td><code>cbor_simple</code></td></tr><tr><td>array</td><td>atomic vector when the elements agree, else <code>list</code></td></tr><tr><td>map with non-empty, unique text keys</td><td>named <code>list</code></td></tr><tr><td>any other map</td><td><code>cbor_map</code> (by <code>map_keys</code>)</td></tr><tr><td>array of maps with non-empty, unique text keys</td><td><code>data.frame</code>, with <code>data_frame = TRUE</code></td></tr><tr><td>tag 0 (date/time text), tag 1 (epoch)</td><td><code>POSIXct</code>, UTC</td></tr><tr><td>tag 2, 3 (bignum)</td><td>the integer it holds, as for an integer; payloads over 128 bytes stay <code>cbor_tag</code></td></tr><tr><td>tag 100 (days), tag 1004 (full date)</td><td><code>Date</code></td></tr><tr><td>tag 55799 (self-describe)</td><td>its content</td></tr><tr><td>tags 64-82, 84-86 (RFC 8746 typed arrays)</td><td><code>integer</code> (8- and 16-bit, signed 32-bit) or <code>double</code>; 64-bit beyond 2^53 by <code>big_integers</code></td></tr><tr><td>tags 1040, 40 (multi-dimensional arrays)</td><td><code>matrix</code> or <code>array</code>, in R's column-major order</td></tr><tr><td>any other tag</td><td><code>cbor_tag</code></td></tr></table><p>An array simplifies to an atomic vector only when its elements agree:
 integers and floats combine to the wider; booleans stay logical, and text
 stays text; wide integers and integer-valued numbers combine to
 <code>cbor_bigint</code>; <code>POSIXct</code> and <code>Date</code> stay their class. <code>null</code> joins any of
@@ -190,6 +205,25 @@ handler applies whatever <code>tags</code> says, and a tag without one follows
 tag number as <code>tag</code> and the original condition as <code>parent</code>. A handler
 that calls <code>cbor_decode()</code> again, for CBOR embedded in a byte string,
 passes that call its own limits. <code><a href="as_cbor.html">as_cbor()</a></code> is the encoding half.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="data-frames">Data frames<a class="anchor" aria-label="anchor" href="#data-frames"></a></h2>
+
+
+<p>With <code>data_frame = TRUE</code>, an array whose elements are all maps that
+decode to named lists – every key a non-empty text string, none twice –
+becomes a data frame, one row per map, as <code><a href="cbor_encode.html">cbor_encode()</a></code> writes one.
+Its columns are the union of the maps' keys, in the order they are
+first seen; a key a row lacks is missing there, as <code>null</code> is. Each
+column simplifies as an array of its cells would, so a column of
+numbers is numeric and a column of mixed values is a list (in which a
+missing cell is <code>NULL</code>). An empty array stays <code>logical(0)</code>, and an array
+holding anything other than such maps decodes as usual.</p>
+<p>Rows that share no keys make a frame with as many columns as rows, so
+the cell count is checked against <code>max_cells</code> before the frame is
+allocated, and a frame over it is <code>zucbor_cell_limit</code>.</p>
+<p></p><div class="sourceCode"><pre><code><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># SenML (RFC 8428): a pack of records.</span></span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">cbor_decode</span>(x, <span class="at">data_frame =</span> <span class="cn">TRUE</span>)</span></code></pre><p></p></div>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

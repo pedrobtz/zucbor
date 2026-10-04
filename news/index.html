@@ -53,6 +53,8 @@
 <code><a href="../reference/cbor_decode_prefix.html">cbor_decode_prefix()</a></code> decodes the item a raw vector starts with and reports how many bytes it used, for CBOR inside binary framing such as WebAuthn <code>authData</code>. What follows the item is not read.</li>
 <li>RFC 8746 typed arrays decode to integer and double vectors, and multi-dimensional arrays (tags 40 and 1040) to matrices and arrays. <code>cbor_encode(typed_arrays = TRUE)</code> writes numeric vectors as typed arrays and matrices as tag 1040: smaller, and much faster to read and write. Off by default, so existing output is unchanged.</li>
 <li>
+<code>cbor_read_seq(each =)</code> reads a sequence of any length in memory bounded by its largest item: each item is checked whole, decoded and passed to a function as soon as its last byte arrives. The limits then apply per item.</li>
+<li>
 <code>tag_handlers =</code> in the decoders gives meaning to any tag: a function per tag number turns its decoded content into an R value. Handlers run only after the whole input has been checked, and an error in one is <code>zucbor_handler_error</code>. <code><a href="../reference/as_cbor.html">as_cbor()</a></code> is the encoding half: an S3 generic that <code><a href="../reference/cbor_encode.html">cbor_encode()</a></code> calls for any class it does not know.</li>
 <li>
 <code><a href="../reference/cbor_validate.html">cbor_validate()</a></code> runs the check alone; <code><a href="../reference/cbor_diagnose.html">cbor_diagnose()</a></code> shows CBOR in RFC 8949 diagnostic notation, as the RFC’s own examples write it.</li>

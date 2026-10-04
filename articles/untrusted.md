@@ -72,7 +72,10 @@ tryCatch(cbor_decode(hex("83010203"), max_items = 3),
 [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
 reads a file, URL or connection, and never reads more than
 `max_size + 1` bytes, so an endless stream fails instead of filling
-memory.
+memory. A log or a socket that is a long CBOR sequence is read item by
+item with `cbor_read_seq(each =)`: then `max_size` bounds each item
+rather than the stream, and each item is still checked whole before it
+is built.
 
 ## Duplicate map keys
 

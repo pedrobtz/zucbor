@@ -149,7 +149,10 @@ gigabytes.</p>
 <span><span class="co">#&gt; [1] "zucbor_item_limit"</span></span></code></pre></div>
 <p><code><a href="../reference/cbor_read.html">cbor_read()</a></code> reads a file, URL or connection, and never
 reads more than <code>max_size + 1</code> bytes, so an endless stream
-fails instead of filling memory.</p>
+fails instead of filling memory. A log or a socket that is a long CBOR
+sequence is read item by item with <code>cbor_read_seq(each =)</code>:
+then <code>max_size</code> bounds each item rather than the stream, and
+each item is still checked whole before it is built.</p>
 </div>
 <div class="section level2">
 <h2 id="duplicate-map-keys">Duplicate map keys<a class="anchor" aria-label="anchor" href="#duplicate-map-keys"></a>

@@ -7,17 +7,22 @@
 \usage{
 cbor_read(file, ..., max_size = 64 * 1024^2)
 
-cbor_read_seq(file, ..., max_size = 64 * 1024^2)
+cbor_read_seq(file, ..., each = NULL, max_size = 64 * 1024^2)
 }
 \arguments{
 \item{file}{A file path, a URL, or a connection.}
 
 \item{...}{Arguments passed on to \code{\link[=cbor_decode]{cbor_decode()}} or \code{\link[=cbor_decode_seq]{cbor_decode_seq()}}.}
 
-\item{max_size}{Largest input allowed, in bytes, or \code{Inf}.}
+\item{max_size}{The largest input, in bytes, read before giving up with
+\code{zucbor_size_limit}; with \code{each}, the largest item.}
+
+\item{each}{\code{NULL}, or a function of one argument, called with each item
+of the sequence in turn. See "Reading a sequence item by item".}
 }
 \value{
-As \code{\link[=cbor_decode]{cbor_decode()}} or \code{\link[=cbor_decode_seq]{cbor_decode_seq()}}.
+As \code{\link[=cbor_decode]{cbor_decode()}} or \code{\link[=cbor_decode_seq]{cbor_decode_seq()}}; with \code{each}, the number
+of items read, a double.
 }
 \description{
 Reads the input and decodes it as \code{\link[=cbor_decode]{cbor_decode()}} or \code{\link[=cbor_decode_seq]{cbor_decode_seq()}}
@@ -25,15 +30,35 @@ would. At most \code{max_size + 1} bytes are ever read, so an oversized file or
 an endless connection fails with \code{zucbor_size_limit} rather than
 exhausting memory.
 }
-\details{
+\section{Reading a sequence item by item}{
+
+With \code{each}, \code{cbor_read_seq()} reads a sequence of any length in memory
+bounded by its largest item: each item is decoded and passed to \code{each}
+as soon as its last byte has been read, nothing is kept, and the call
+returns the number of items read. A long telemetry log or a socket that
+stays open is read this way.
+
+Each item is still checked whole before anything is built from it, as
+\code{\link[=cbor_decode]{cbor_decode()}} does, and the limits then apply to each item: \code{max_size}
+bounds the bytes of one item, and \code{max_items} the data items inside one.
+A faulty item stops the read with its condition, after \code{each} has been
+called for every item before it; the condition's \code{offset} counts from the
+start of the read, not of the item. So does input that ends inside an
+item. An error in \code{each} propagates unchanged and stops the read too.
+
 A string with an \code{http}, \code{https}, \code{ftp}, \code{ftps} or \code{file} scheme is read
 with \code{\link[=url]{url()}}, any other string as a file path. A connection that is not
 open is opened in \code{"rb"} mode and closed afterwards; an open one must be
 binary, is read from its current position, and is left open.
 }
+
 \examples{
 path <- tempfile(fileext = ".cbor")
 writeBin(as.raw(c(0xa1, 0x61, 0x61, 0x01)), path)
 cbor_read(path)
+
+# A sequence of three items, one at a time.
+writeBin(cbor_encode_seq(list(1L, "two", list(3L))), path)
+cbor_read_seq(path, each = function(item) str(item))
 unlink(path)
 }

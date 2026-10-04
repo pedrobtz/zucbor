@@ -126,6 +126,21 @@ zu_decode <- function(x, mode, simplify, map_keys, tags, big_integers,
                       duplicate_keys, deterministic, max_depth, max_size,
                       max_items, tag_handlers, call) {
   zu_arg_raw(x, "x", call)
+  a <- zu_decode_args(mode, simplify, map_keys, tags, big_integers,
+                      duplicate_keys, deterministic, max_depth, max_size,
+                      max_items, tag_handlers, call)
+  if (length(x) > max_size) {
+    zu_raise_fault(zu_size_fault(max_size), call)
+  }
+  res <- .Call(zucbor_decode, x, a$opts, a$max_items, call, a$handlers)
+  if (!is.null(res[[1L]])) zu_raise_fault(res[[1L]], call)
+  if (mode == 2L) list(value = res[[2L]], consumed = res[[3L]]) else res[[2L]]
+}
+
+# The decoders' arguments, checked, as zucbor_decode() takes them.
+zu_decode_args <- function(mode, simplify, map_keys, tags, big_integers,
+                           duplicate_keys, deterministic, max_depth, max_size,
+                           max_items, tag_handlers, call) {
   simplify <- zu_arg_choice(simplify, "simplify", c("preserve", "none"), call)
   map_keys <- zu_arg_choice(map_keys, "map_keys", c("auto", "map", "string"), call)
   tags <- zu_arg_choice(tags, "tags", c("convert", "keep"), call)
@@ -135,15 +150,10 @@ zu_decode <- function(x, mode, simplify, map_keys, tags, big_integers,
   zu_arg_flag(deterministic, "deterministic", call)
   zu_arg_limits(max_depth, max_size, max_items, call)
   handlers <- zu_arg_handlers(tag_handlers, call)
-  if (length(x) > max_size) {
-    zu_raise_fault(zu_size_fault(max_size), call)
-  }
   opts <- c(mode, deterministic, duplicate_keys, max_depth,
             simplify, map_keys, tags, big_integers) # integer codes
-  res <- .Call(zucbor_decode, x, as.integer(opts), as.numeric(max_items), call,
-               handlers)
-  if (!is.null(res[[1L]])) zu_raise_fault(res[[1L]], call)
-  if (mode == 2L) list(value = res[[2L]], consumed = res[[3L]]) else res[[2L]]
+  list(opts = as.integer(opts), max_items = as.numeric(max_items),
+       handlers = handlers)
 }
 
 #' Decode the CBOR item at the start of a raw vector

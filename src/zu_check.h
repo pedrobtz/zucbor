@@ -36,6 +36,14 @@ typedef struct {
     int prefix;             /* nonzero: the first item only; what follows is
                              * not read (cbor_decode_prefix()). Not with
                              * sequence. */
+    int stream;             /* nonzero: a sequence read from a stream
+                             * (cbor_read_seq(each =)). The check stops at
+                             * the first item that is not complete and good:
+                             * one the input ends inside is left for the
+                             * next read, unreported, and a faulty one is
+                             * reported only if it comes first, so the items
+                             * before it are delivered. max_items is per
+                             * item. Only with sequence. */
 } zu_check_opts;
 
 /* Why a check failed. status is an enumerator name (a CborError, or one of
@@ -56,7 +64,8 @@ typedef struct {
     size_t *counts;
     size_t n, cap;
     size_t n_items;         /* top-level items found */
-    size_t consumed;        /* bytes the items used */
+    size_t consumed;        /* bytes the items used; under stream, where
+                             * the first item not delivered starts */
 } zu_plan;
 
 /* Runs the whole check phase over buf. Returns 0 and fills plan (which may

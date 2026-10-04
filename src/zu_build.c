@@ -1142,7 +1142,8 @@ static SEXP build(zu_builder *b, CborValue *it, int *kind)
 
 /* ---- entry point ------------------------------------------------------------------- */
 
-/* opts: mode (0 one item, 1 a sequence, 2 a prefix), deterministic,
+/* opts: mode (0 one item, 1 a sequence, 2 a prefix, 3 a stream: the
+ * complete items a sequence read so far starts with), deterministic,
  * duplicate_keys, max_depth, simplify, map_keys, tags, big_integers
  * (integer codes, validated in R). handlers
  * are the caller's tag handlers, or NULL.
@@ -1162,10 +1163,11 @@ SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
         Rf_error("zucbor_decode: arguments must be validated in R");
     const int *o = INTEGER(opts);
     zu_check_opts opt;
-    if (o[0] < 0 || o[0] > 2)
+    if (o[0] < 0 || o[0] > 3)
         Rf_error("zucbor_decode: arguments must be validated in R");
-    opt.sequence = o[0] == 1;
+    opt.sequence = o[0] == 1 || o[0] == 3;
     opt.prefix = o[0] == 2;
+    opt.stream = o[0] == 3;
     opt.deterministic = o[1];
     opt.duplicate_keys = o[2];
     opt.max_depth = o[3];
@@ -1221,6 +1223,7 @@ SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
             SET_VECTOR_ELT(items, (R_xlen_t) i, build(&b, &it, &kind));
             pos = (size_t)(cbor_value_get_next_byte(&it) - buf);
         }
+        SET_VECTOR_ELT(out, 2, Rf_ScalarReal((double) plan.consumed));
         UNPROTECT(1);
     }
     UNPROTECT(1);

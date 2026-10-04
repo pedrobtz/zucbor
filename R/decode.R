@@ -18,6 +18,7 @@
 #' | array | atomic vector when the elements agree, else `list` |
 #' | map with non-empty, unique text keys | named `list` |
 #' | any other map | `cbor_map` (by `map_keys`) |
+#' | array of maps with non-empty, unique text keys | `data.frame`, with `data_frame = TRUE` |
 #' | tag 0 (date/time text), tag 1 (epoch) | `POSIXct`, UTC |
 #' | tag 2, 3 (bignum) | the integer it holds, as for an integer; payloads over 128 bytes stay `cbor_tag` |
 #' | tag 100 (days), tag 1004 (full date) | `Date` |
@@ -62,6 +63,26 @@
 #' that calls `cbor_decode()` again, for CBOR embedded in a byte string,
 #' passes that call its own limits. [as_cbor()] is the encoding half.
 #'
+#' @section Data frames:
+#' With `data_frame = TRUE`, an array whose elements are all maps that
+#' decode to named lists -- every key a non-empty text string, none twice --
+#' becomes a data frame, one row per map, as [cbor_encode()] writes one.
+#' Its columns are the union of the maps' keys, in the order they are
+#' first seen; a key a row lacks is missing there, as `null` is. Each
+#' column simplifies as an array of its cells would, so a column of
+#' numbers is numeric and a column of mixed values is a list (in which a
+#' missing cell is `NULL`). An empty array stays `logical(0)`, and an array
+#' holding anything other than such maps decodes as usual.
+#'
+#' Rows that share no keys make a frame with as many columns as rows, so
+#' the cell count is checked against `max_cells` before the frame is
+#' allocated, and a frame over it is `zucbor_cell_limit`.
+#'
+#' ```
+#' # SenML (RFC 8428): a pack of records.
+#' cbor_decode(x, data_frame = TRUE)
+#' ```
+#'
 #' @param x A raw vector holding exactly one CBOR data item
 #'   (`cbor_decode()`), or an RFC 8742 sequence of zero or more
 #'   (`cbor_decode_seq()`).
@@ -80,6 +101,11 @@
 #' @param tag_handlers `NULL`, or a list of functions of one argument, named
 #'   by tag number, such as `list("37" = function(value) ...)`. See "Tag
 #'   handlers".
+#' @param data_frame If `TRUE`, an array whose elements are all maps with
+#'   text keys becomes a data frame. See "Data frames".
+#' @param max_cells With `data_frame = TRUE`, the most cells (rows times
+#'   columns) one data frame may have, or `Inf`. Checked before the frame is
+#'   allocated: rows that share no keys make a frame quadratic in the input.
 #' @inheritParams cbor_validate
 #' @return The decoded value; for `cbor_decode_seq()`, a list with one
 #'   element per item.
@@ -101,10 +127,11 @@ cbor_decode <- function(x, simplify = c("preserve", "none"),
                         big_integers = c("bigint", "double", "error"),
                         duplicate_keys = FALSE, deterministic = FALSE,
                         max_depth = 256L, max_size = 64 * 1024^2,
-                        max_items = 1e6, tag_handlers = NULL) {
+                        max_items = 1e6, tag_handlers = NULL,
+                        data_frame = FALSE, max_cells = 1e7) {
   zu_decode(x, mode = 0L, simplify, map_keys, tags, big_integers,
             duplicate_keys, deterministic, max_depth, max_size, max_items,
-            tag_handlers, call = sys.call())
+            tag_handlers, data_frame, max_cells, call = sys.call())
 }
 
 #' @rdname cbor_decode
@@ -115,20 +142,21 @@ cbor_decode_seq <- function(x, simplify = c("preserve", "none"),
                             big_integers = c("bigint", "double", "error"),
                             duplicate_keys = FALSE, deterministic = FALSE,
                             max_depth = 256L, max_size = 64 * 1024^2,
-                            max_items = 1e6, tag_handlers = NULL) {
+                            max_items = 1e6, tag_handlers = NULL,
+                            data_frame = FALSE, max_cells = 1e7) {
   zu_decode(x, mode = 1L, simplify, map_keys, tags, big_integers,
             duplicate_keys, deterministic, max_depth, max_size, max_items,
-            tag_handlers, call = sys.call())
+            tag_handlers, data_frame, max_cells, call = sys.call())
 }
 
 # mode: 0 exactly one item, 1 a sequence, 2 a prefix (as C reads it).
 zu_decode <- function(x, mode, simplify, map_keys, tags, big_integers,
                       duplicate_keys, deterministic, max_depth, max_size,
-                      max_items, tag_handlers, call) {
+                      max_items, tag_handlers, data_frame, max_cells, call) {
   zu_arg_raw(x, "x", call)
   a <- zu_decode_args(mode, simplify, map_keys, tags, big_integers,
                       duplicate_keys, deterministic, max_depth, max_size,
-                      max_items, tag_handlers, call)
+                      max_items, tag_handlers, data_frame, max_cells, call)
   if (length(x) > max_size) {
     zu_raise_fault(zu_size_fault(max_size), call)
   }
@@ -140,7 +168,7 @@ zu_decode <- function(x, mode, simplify, map_keys, tags, big_integers,
 # The decoders' arguments, checked, as zucbor_decode() takes them.
 zu_decode_args <- function(mode, simplify, map_keys, tags, big_integers,
                            duplicate_keys, deterministic, max_depth, max_size,
-                           max_items, tag_handlers, call) {
+                           max_items, tag_handlers, data_frame, max_cells, call) {
   simplify <- zu_arg_choice(simplify, "simplify", c("preserve", "none"), call)
   map_keys <- zu_arg_choice(map_keys, "map_keys", c("auto", "map", "string"), call)
   tags <- zu_arg_choice(tags, "tags", c("convert", "keep"), call)
@@ -150,9 +178,11 @@ zu_decode_args <- function(mode, simplify, map_keys, tags, big_integers,
   zu_arg_flag(deterministic, "deterministic", call)
   zu_arg_limits(max_depth, max_size, max_items, call)
   handlers <- zu_arg_handlers(tag_handlers, call)
+  zu_arg_flag(data_frame, "data_frame", call)
+  zu_arg_limit(max_cells, "max_cells", 2^53, allow_inf = TRUE, call)
   opts <- c(mode, deterministic, duplicate_keys, max_depth,
-            simplify, map_keys, tags, big_integers) # integer codes
-  list(opts = as.integer(opts), max_items = as.numeric(max_items),
+            simplify, map_keys, tags, big_integers, data_frame) # integer codes
+  list(opts = as.integer(opts), max_items = as.numeric(c(max_items, max_cells)),
        handlers = handlers)
 }
 
@@ -191,10 +221,11 @@ cbor_decode_prefix <- function(x, simplify = c("preserve", "none"),
                                big_integers = c("bigint", "double", "error"),
                                duplicate_keys = FALSE, deterministic = FALSE,
                                max_depth = 256L, max_size = 64 * 1024^2,
-                               max_items = 1e6, tag_handlers = NULL) {
+                               max_items = 1e6, tag_handlers = NULL,
+                               data_frame = FALSE, max_cells = 1e7) {
   zu_decode(x, mode = 2L, simplify, map_keys, tags, big_integers,
             duplicate_keys, deterministic, max_depth, max_size, max_items,
-            tag_handlers, call = sys.call())
+            tag_handlers, data_frame, max_cells, call = sys.call())
 }
 
 # The 0-based code of a choice, the way C reads it. The default is the whole

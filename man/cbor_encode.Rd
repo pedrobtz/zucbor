@@ -67,6 +67,7 @@ each value exactly; and map entries sorted by their encoded keys.
    \code{cbor_map}, \code{cbor_tag}, \code{cbor_simple} \tab a map, a tagged item, a simple value \cr
    unnamed list or vector \tab array \cr
    fully named list or vector \tab map with text keys \cr
+   data frame \tab array of maps, one per row, keyed by column name \cr
 }
 
 
@@ -83,9 +84,20 @@ encode identically.
 
 These have no CBOR form and raise \code{zucbor_unsupported_type}: complex
 numbers, functions, environments, external pointers, S4 objects,
-\code{POSIXlt} (convert with \code{\link[=as.POSIXct]{as.POSIXct()}}) and data frames. Names that are
-partly missing, \code{NA} or empty are \code{zucbor_invalid_argument}, and two keys
-that encode identically are \code{zucbor_duplicate_key}.
+\code{POSIXlt} (convert with \code{\link[=as.POSIXct]{as.POSIXct()}}), and data frame columns that are
+matrices, data frames or raw vectors. Names that are partly missing, \code{NA}
+or empty are \code{zucbor_invalid_argument}, and two keys that encode
+identically are \code{zucbor_duplicate_key}.
+}
+
+\section{Data frames}{
+
+A data frame is written row by row, as \code{zujson} writes one: an array of
+maps, each keyed by the column names, so \code{data.frame(a = 1:2)} is
+\verb{[\{"a": 1\}, \{"a": 2\}]}. A cell is written as the same element of its
+column would be in a vector, \code{NA} as \code{null}, and a list column's cell as
+a value of its own. Row names are dropped. A column of a class zucbor
+does not know goes through \code{\link[=as_cbor]{as_cbor()}} whole, once. \code{cbor_decode(x, data_frame = TRUE)} reads such an array back as a data frame.
 }
 
 \section{Typed arrays}{
@@ -110,7 +122,9 @@ written and read several times faster.
 Decoding what \code{cbor_encode()} wrote gives back the value, except that:
 \code{NA} comes back as \code{NULL}, or \code{NA} of the vector's type; a whole double
 comes back as an integer; \code{list(1L)} and \code{1L} both encode as \code{1};
-\code{NaN} payloads are not kept; and fractional days of a \code{Date} are dropped.
+\code{NaN} payloads are not kept; fractional days of a \code{Date} are dropped; and
+a data frame comes back, with \code{data_frame = TRUE}, without its row names,
+with factors as text, and with its columns in the encoded key order.
 }
 
 \examples{

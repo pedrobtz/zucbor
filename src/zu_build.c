@@ -39,8 +39,11 @@ enum { BIG_BIGINT, BIG_DOUBLE, BIG_ERROR };
  * its neighbours become. */
 enum {
     K_NULL, K_LGL, K_INT, K_INTDBL, K_FLOAT, K_BIGINT, K_STR,
-    K_POSIXCT, K_DATE, K_OTHER, K_COUNT
+    K_POSIXCT, K_DATE, K_OTHER, K_ROW, K_COUNT
 };
+/* K_ROW is a map that became a named list with every key text: in the
+ * lattice it is K_OTHER, and under data_frame = TRUE an array of nothing
+ * else is a data frame (design section 6.10). */
 
 typedef struct {
     const uint8_t *buf;
@@ -53,6 +56,11 @@ typedef struct {
     R_xlen_t n_handlers;
     SEXP handlers;                  /* the functions, in handler_tags' order */
     SEXP ns;
+    int data_frame;                 /* nonzero: arrays of rows become data frames */
+    int frame_off;                  /* nonzero: the next array is an ndarray's
+                                     * elements, which never become one */
+    double max_cells;
+    const int *row_kinds;           /* the value kinds of the last K_ROW built */
 } zu_builder;
 
 static SEXP build(zu_builder *b, CborValue *it, int *kind);
@@ -503,7 +511,9 @@ static SEXP build_ndarray(zu_builder *b, CborTag tag, CborValue *it, int *kind, 
         shared = find_handler(b, t) != R_NilValue;
     }
     int inner;
+    b->frame_off = cbor_value_is_array(&outer);
     SEXP el = PROTECT(build(b, &outer, &inner));
+    b->frame_off = 0;
     err = cbor_value_leave_container(it, &outer);
     if (err)
         internal(b, err, at);
@@ -770,7 +780,7 @@ static SEXP simplify_staged(const zu_stage *st)
 
     if (n == 0)
         return Rf_allocVector(LGLSXP, 0);
-    if (has[K_OTHER])
+    if (has[K_OTHER] || has[K_ROW])
         return R_NilValue;
 
     /* Logical is a kind of its own: [false, 1.5] is a list, not c(0, 1.5),
@@ -846,12 +856,19 @@ static size_t next_count(zu_builder *b, const uint8_t *at)
     return b->plan->counts[b->next_count++];
 }
 
+static SEXP build_frame(zu_builder *b, SEXP rows, const int *const *row_kinds,
+                        R_xlen_t nrow, const uint8_t *at);
+
 static SEXP build_array(zu_builder *b, CborValue *it, int *kind)
 {
     const uint8_t *at = cbor_value_get_next_byte(it);
+    int may_frame = b->data_frame && !b->frame_off;
+    b->frame_off = 0;
     zu_stage st;
     st.n = (R_xlen_t) next_count(b, at);
     size_t m = (size_t) st.n + 1;
+    const int **row_kinds = may_frame ? (const int **) R_alloc(m, sizeof(int *)) : NULL;
+    int all_rows = may_frame && st.n > 0;
     st.kinds = (int *) R_alloc(m, sizeof(int));
     st.num = (double *) R_alloc(m, sizeof(double));
     st.lgl = (int *) R_alloc(m, sizeof(int));
@@ -935,19 +952,142 @@ static SEXP build_array(zu_builder *b, CborValue *it, int *kind)
         }
         SET_VECTOR_ELT(st.list, i, build(b, &child, &st.kinds[i]));
         st.built[i] = 1;
+        if (row_kinds)
+            row_kinds[i] = st.kinds[i] == K_ROW ? b->row_kinds : NULL;
     }
     err = cbor_value_leave_container(it, &child);
     if (err)
         internal(b, err, at);
+    for (R_xlen_t i = 0; all_rows && i < st.n; i++)
+        all_rows = st.kinds[i] == K_ROW;
 
+    *kind = K_OTHER;
+    if (all_rows) {
+        SEXP out = build_frame(b, st.list, row_kinds, st.n, at);
+        UNPROTECT(2);
+        return out;
+    }
     SEXP out = b->simplify == SIMPLIFY_PRESERVE ? simplify_staged(&st) : R_NilValue;
     if (out == R_NilValue)
         out = stage_list(&st);
     else
         out = as_is(out);
-    *kind = K_OTHER;
     UNPROTECT(2);
     return out;
+}
+
+/* ---- data frames ----------------------------------------------------------------- */
+
+static void fail_cells(zu_builder *b, const uint8_t *at)
+{
+    zu_fault f;
+    f.status = ZU_ERR_CELL_LIMIT;
+    f.detail = NULL;
+    f.offset = (double)(at - b->buf);
+    f.limit = "max_cells";
+    f.limit_value = b->max_cells;
+    SEXP fault = PROTECT(zu_fault_sexp(&f));
+    SEXP name = PROTECT(Rf_mkString("zucbor"));
+    SEXP ns = PROTECT(R_FindNamespace(name));
+    SEXP quoted = PROTECT(Rf_lang2(Rf_install("quote"), b->call));
+    SEXP expr = PROTECT(Rf_lang3(Rf_install("zu_raise_fault"), fault, quoted));
+    Rf_eval(expr, ns);
+    UNPROTECT(5);
+    Rf_error("zucbor: zu_raise_fault() returned");
+}
+
+/* Where name goes in an open-addressed table of cap slots (a power of two)
+ * keyed by CHARSXP pointer: R caches CHARSXPs, so equal UTF-8 names are the
+ * same pointer, and the pointers are R's, not the adversary's to choose. */
+static size_t name_slot(const SEXP *slots, size_t cap, SEXP name)
+{
+    size_t h = (size_t)(((uintptr_t) name >> 4) * UINT64_C(0x9E3779B97F4A7C15));
+    for (size_t i = h & (cap - 1);; i = (i + 1) & (cap - 1))
+        if (slots[i] == NULL || slots[i] == name)
+            return i;
+}
+
+/* An array of rows as a data frame (design section 6.10): the columns are
+ * the union of the keys in first-seen order, a missing key is null, and
+ * each column goes through the array lattice with the kinds its values
+ * were built with. The cell count is checked against max_cells before a
+ * column is allocated: rows sharing no keys would otherwise make the frame
+ * quadratic in the input (zujson). */
+static SEXP build_frame(zu_builder *b, SEXP rows, const int *const *row_kinds,
+                        R_xlen_t nrow, const uint8_t *at)
+{
+    size_t total = 0;
+    for (R_xlen_t r = 0; r < nrow; r++)
+        total += (size_t) XLENGTH(VECTOR_ELT(rows, r));
+    size_t cap = 16;
+    while (cap < 2 * total)
+        cap *= 2;
+    SEXP *slots = (SEXP *) R_alloc(cap, sizeof(SEXP));
+    R_xlen_t *slot_col = (R_xlen_t *) R_alloc(cap, sizeof(R_xlen_t));
+    SEXP *order = (SEXP *) R_alloc(total + 1, sizeof(SEXP));
+    memset(slots, 0, cap * sizeof(SEXP));
+    R_xlen_t ncol = 0;
+    for (R_xlen_t r = 0; r < nrow; r++) {
+        SEXP names = Rf_getAttrib(VECTOR_ELT(rows, r), R_NamesSymbol);
+        for (R_xlen_t k = 0; k < XLENGTH(names); k++) {
+            SEXP nm = STRING_ELT(names, k);
+            size_t i = name_slot(slots, cap, nm);
+            if (slots[i] == NULL) {
+                slots[i] = nm;
+                slot_col[i] = ncol;
+                order[ncol++] = nm;
+            }
+        }
+    }
+    if ((double) nrow * (double) ncol > b->max_cells)
+        fail_cells(b, at);
+
+    /* Every cell is null until a row names it. */
+    int *kinds = (int *) R_alloc((size_t) nrow * (size_t) ncol + 1, sizeof(int));
+    for (size_t c = 0; c < (size_t) nrow * (size_t) ncol; c++)
+        kinds[c] = K_NULL;
+    SEXP cols = PROTECT(Rf_allocVector(VECSXP, ncol));
+    for (R_xlen_t j = 0; j < ncol; j++)
+        SET_VECTOR_ELT(cols, j, Rf_allocVector(VECSXP, nrow));
+    for (R_xlen_t r = 0; r < nrow; r++) {
+        SEXP row = VECTOR_ELT(rows, r);
+        SEXP names = Rf_getAttrib(row, R_NamesSymbol);
+        for (R_xlen_t k = 0; k < XLENGTH(row); k++) {
+            R_xlen_t j = slot_col[name_slot(slots, cap, STRING_ELT(names, k))];
+            SET_VECTOR_ELT(VECTOR_ELT(cols, j), r, VECTOR_ELT(row, k));
+            kinds[(size_t) j * (size_t) nrow + (size_t) r] = row_kinds[r][k];
+        }
+        if (++b->items % ZU_INTERRUPT_EVERY == 0)
+            R_CheckUserInterrupt();
+    }
+
+    char *built = (char *) R_alloc((size_t) nrow + 1, 1);
+    memset(built, 1, (size_t) nrow + 1);
+    for (R_xlen_t j = 0; j < ncol; j++) {
+        zu_stage st;
+        st.n = nrow;
+        st.kinds = kinds + (size_t) j * (size_t) nrow;
+        st.num = NULL;          /* every value is built: never read */
+        st.lgl = NULL;
+        st.strs = R_NilValue;
+        st.list = VECTOR_ELT(cols, j);
+        st.built = built;
+        SEXP v = b->simplify == SIMPLIFY_PRESERVE ? simplify_staged(&st) : R_NilValue;
+        if (v != R_NilValue)
+            SET_VECTOR_ELT(cols, j, v);
+    }
+
+    SEXP names = PROTECT(Rf_allocVector(STRSXP, ncol));
+    for (R_xlen_t j = 0; j < ncol; j++)
+        SET_STRING_ELT(names, j, order[j]);
+    Rf_setAttrib(cols, R_NamesSymbol, names);
+    SEXP rn = PROTECT(Rf_allocVector(INTSXP, 2));
+    INTEGER(rn)[0] = NA_INTEGER;
+    INTEGER(rn)[1] = nrow > INT_MAX ? INT_MIN : -(int) nrow;
+    Rf_setAttrib(cols, R_RowNamesSymbol, rn);
+    Rf_setAttrib(cols, R_ClassSymbol, Rf_mkString("data.frame"));
+    UNPROTECT(3);
+    return cols;
 }
 
 /* ---- maps ------------------------------------------------------------------------ */
@@ -999,6 +1139,8 @@ static SEXP build_map(zu_builder *b, CborValue *it, int *kind)
     PROTECT_INDEX keys_ix;
     PROTECT_WITH_INDEX(keys, &keys_ix);
     int faithful = b->map_keys != KEYS_MAP;
+    int all_text = 1;           /* no key was stringified */
+    int *value_kinds = b->data_frame ? (int *) R_alloc((size_t) n + 1, sizeof(int)) : NULL;
     CborValue child;
     int key_kind, value_kind;
     CborError err = cbor_value_enter_container(it, &child);
@@ -1032,11 +1174,14 @@ static SEXP build_map(zu_builder *b, CborValue *it, int *kind)
                 size_t len;
                 const char *d = zu_diagnose_item(&key_at, &len);
                 SET_STRING_ELT(names, i, zu_mkchar(b, d, len, key_start));
+                all_text = 0;
             } else {
                 faithful = 0;
             }
         }
         SET_VECTOR_ELT(values, i, build(b, &child, &value_kind));
+        if (value_kinds)
+            value_kinds[i] = value_kind;
     }
     err = cbor_value_leave_container(it, &child);
     if (err)
@@ -1057,6 +1202,10 @@ static SEXP build_map(zu_builder *b, CborValue *it, int *kind)
     if (faithful || b->map_keys == KEYS_STRING) {
         Rf_setAttrib(values, R_NamesSymbol, names);
         out = values;
+        if (value_kinds && all_text) {
+            *kind = K_ROW;
+            b->row_kinds = value_kinds;
+        }
     } else {
         if (keys == R_NilValue) {       /* every key was text, but not faithful */
             keys = Rf_allocVector(VECSXP, n);
@@ -1144,14 +1293,16 @@ static SEXP build(zu_builder *b, CborValue *it, int *kind)
 
 /* opts: mode (0 one item, 1 a sequence, 2 a prefix, 3 a stream: the
  * complete items a sequence read so far starts with), deterministic,
- * duplicate_keys, max_depth, simplify, map_keys, tags, big_integers
- * (integer codes, validated in R). handlers
+ * duplicate_keys, max_depth, simplify, map_keys, tags, big_integers,
+ * data_frame (integer codes, validated in R); max_items is
+ * c(max_items, max_cells). handlers
  * are the caller's tag handlers, or NULL.
  * Returns list(fault, value, consumed): a check-phase fault is returned for R to
  * raise with the user's call; a build-phase one is raised from here. */
 SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
 {
-    if (TYPEOF(x) != RAWSXP || TYPEOF(opts) != INTSXP || XLENGTH(opts) != 8)
+    if (TYPEOF(x) != RAWSXP || TYPEOF(opts) != INTSXP || XLENGTH(opts) != 9
+        || TYPEOF(max_items) != REALSXP || XLENGTH(max_items) != 2)
         Rf_error("zucbor_decode: arguments must be validated in R");
     /* handlers: NULL, or list(tags, functions, namespace), from R. */
     if (handlers != R_NilValue
@@ -1171,8 +1322,9 @@ SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
     opt.deterministic = o[1];
     opt.duplicate_keys = o[2];
     opt.max_depth = o[3];
-    double mi = Rf_asReal(max_items);
-    if (opt.max_depth < 1 || opt.max_depth > ZU_MAX_DEPTH_CAP || ISNAN(mi) || mi < 1)
+    double mi = REAL(max_items)[0], mc = REAL(max_items)[1];
+    if (opt.max_depth < 1 || opt.max_depth > ZU_MAX_DEPTH_CAP || ISNAN(mi) || mi < 1
+        || ISNAN(mc) || mc < 1)
         Rf_error("zucbor_decode: limits must be validated in R");
     opt.max_items = R_FINITE(mi) ? (uint64_t) mi : UINT64_MAX;
 
@@ -1196,6 +1348,8 @@ SEXP zucbor_decode(SEXP x, SEXP opts, SEXP max_items, SEXP call, SEXP handlers)
     b.map_keys = o[5];
     b.tags = o[6];
     b.big_integers = o[7];
+    b.data_frame = o[8];
+    b.max_cells = mc;
     b.call = call;
     if (handlers != R_NilValue) {
         b.handler_tags = REAL(VECTOR_ELT(handlers, 0));

@@ -16,7 +16,9 @@ cbor_decode(
   max_depth = 256L,
   max_size = 64 * 1024^2,
   max_items = 1e+06,
-  tag_handlers = NULL
+  tag_handlers = NULL,
+  data_frame = FALSE,
+  max_cells = 1e+07
 )
 
 cbor_decode_seq(
@@ -30,7 +32,9 @@ cbor_decode_seq(
   max_depth = 256L,
   max_size = 64 * 1024^2,
   max_items = 1e+06,
-  tag_handlers = NULL
+  tag_handlers = NULL,
+  data_frame = FALSE,
+  max_cells = 1e+07
 )
 }
 \arguments{
@@ -72,6 +76,13 @@ chunk of an indefinite-length string, or \code{Inf}.}
 \item{tag_handlers}{\code{NULL}, or a list of functions of one argument, named
 by tag number, such as \code{list("37" = function(value) ...)}. See "Tag
 handlers".}
+
+\item{data_frame}{If \code{TRUE}, an array whose elements are all maps with
+text keys becomes a data frame. See "Data frames".}
+
+\item{max_cells}{With \code{data_frame = TRUE}, the most cells (rows times
+columns) one data frame may have, or \code{Inf}. Checked before the frame is
+allocated: rows that share no keys make a frame quadratic in the input.}
 }
 \value{
 The decoded value; for \code{cbor_decode_seq()}, a list with one
@@ -96,6 +107,7 @@ a length header cannot make R allocate for data the input does not hold.
    array \tab atomic vector when the elements agree, else \code{list} \cr
    map with non-empty, unique text keys \tab named \code{list} \cr
    any other map \tab \code{cbor_map} (by \code{map_keys}) \cr
+   array of maps with non-empty, unique text keys \tab \code{data.frame}, with \code{data_frame = TRUE} \cr
    tag 0 (date/time text), tag 1 (epoch) \tab \code{POSIXct}, UTC \cr
    tag 2, 3 (bignum) \tab the integer it holds, as for an integer; payloads over 128 bytes stay \code{cbor_tag} \cr
    tag 100 (days), tag 1004 (full date) \tab \code{Date} \cr
@@ -142,6 +154,27 @@ handler applies whatever \code{tags} says, and a tag without one follows
 tag number as \code{tag} and the original condition as \code{parent}. A handler
 that calls \code{cbor_decode()} again, for CBOR embedded in a byte string,
 passes that call its own limits. \code{\link[=as_cbor]{as_cbor()}} is the encoding half.
+}
+
+\section{Data frames}{
+
+With \code{data_frame = TRUE}, an array whose elements are all maps that
+decode to named lists -- every key a non-empty text string, none twice --
+becomes a data frame, one row per map, as \code{\link[=cbor_encode]{cbor_encode()}} writes one.
+Its columns are the union of the maps' keys, in the order they are
+first seen; a key a row lacks is missing there, as \code{null} is. Each
+column simplifies as an array of its cells would, so a column of
+numbers is numeric and a column of mixed values is a list (in which a
+missing cell is \code{NULL}). An empty array stays \code{logical(0)}, and an array
+holding anything other than such maps decodes as usual.
+
+Rows that share no keys make a frame with as many columns as rows, so
+the cell count is checked against \code{max_cells} before the frame is
+allocated, and a frame over it is \code{zucbor_cell_limit}.
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{# SenML (RFC 8428): a pack of records.
+cbor_decode(x, data_frame = TRUE)
+}\if{html}{\out{</div>}}
 }
 
 \examples{

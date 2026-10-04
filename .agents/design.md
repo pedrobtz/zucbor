@@ -47,7 +47,7 @@ Design principle:
 | Unknown tags | yes, as `cbor_tag` | registered handlers | |
 | Non-text map keys | yes, as `cbor_map` | | stringified by default |
 | Diagnostic notation (`cbor_diagnose()`) | yes, output only, as RFC 8949 Appendix A writes it | | parsing diagnostic notation |
-| Data frames | | row-oriented, as `zujson` | |
+| Data frames | row-oriented, as `zujson`; decoded opt-in (Stage 14) | | |
 | CTAP2 canonical key order (length-first) | | yes, if a caller needs it (§19) | as the default |
 | Reading a sequence item by item (`cbor_read_seq(each =)`) | yes (Stage 15) | | |
 | Incremental decoding of a single item | | | yes — see §9 |
@@ -160,7 +160,9 @@ cbor_decode(
   max_depth      = 256L,
   max_size       = 64 * 1024^2,
   max_items      = 1e6,
-  tag_handlers   = NULL    # Stage 10: list("37" = function(value) ...), §6.6
+  tag_handlers   = NULL,   # Stage 10: list("37" = function(value) ...), §6.6
+  data_frame     = FALSE,  # Stage 14: arrays of text-keyed maps as data frames, §6.10
+  max_cells      = 1e7     # Stage 14: cells of one such frame, §6.10
 )
 ```
 
@@ -404,6 +406,16 @@ Decisions:
 - A typed array is kind "other" in the lattice of §6.3, and a one-element one is marked `I()`, so it re-encodes as a typed array (§7.6). A matrix's elements lose the `I()`: the `dim` attribute already says it is an array.
 - Elements built by a tag handler that are not a vector of the right length leave the tag a `cbor_tag` holding `list(dimensions, elements)`; a handler's result is copied before `dim` is set on it, since it may be shared.
 
+### 6.10 Data frames
+
+Stage 14. With `data_frame = TRUE` (off by default), an array whose elements are all *rows* is a `data.frame`. A row is a map that decoded to a named list with every key text: so not a map with an empty or repeated key, and not one whose keys were stringified by `map_keys = "string"`. The builder marks it as a kind of its own (`K_ROW`), which is "other" in the lattice of §6.3, and remembers the kinds its values were built with.
+
+- **Columns** are the union of the rows' keys, in first-seen order; a key a row lacks is a null cell.
+- **Each column goes through the lattice** of §6.3 with the kinds its cells were built with, not their R types: a float and a wide integer stay a list, though both are doubles in R. A column that does not simplify is a list, in which a missing cell is `NULL`; under `simplify = "none"`, every column is. No column is marked `I()`.
+- **`max_cells`** (default 1e7, or `Inf`) bounds rows times columns, checked once the union is known and before a column is allocated (`ZU_ERR_CELL_LIMIT`, `zucbor_cell_limit`, a `zucbor_limit_error`, with the array's offset). Rows that share no keys make a frame quadratic in the input: 5000 one-key rows are 50 kB of CBOR and 25 million cells. The rows themselves are already bounded by `max_items`. zujson found that a body-size limit cannot stand in for this.
+- `[]` is still `logical(0)`. An array holding a null, a scalar or any other map among its rows decodes as usual. The elements of a multi-dimensional array (§6.9) never become a frame, so a matrix of maps stays a matrix.
+- The check phase is unchanged: a frame is a reading of valid input, not a rule about it.
+
 ---
 
 ## 7. R to CBOR
@@ -450,7 +462,7 @@ Vectors follow `zujson`: a length-1 atomic vector is a scalar unless `I()`-wrapp
 
 ### 7.3 What cannot be encoded
 
-`zucbor_unsupported_type`, for complex, closures, environments, external pointers, S4 objects, `POSIXlt` (a list of eleven fields, never what anyone meant by a timestamp), and data frames in v1. A `cbor_simple` in 20–31 (reserved, or spelled `false`/`true`/`null`/`undefined`) and an invalid `cbor_bigint` are `zucbor_invalid_argument`: the constructors validate, and the encoder validates again, because nothing stops a user building the structure by hand.
+`zucbor_unsupported_type`, for complex, closures, environments, external pointers, S4 objects, `POSIXlt` (a list of eleven fields, never what anyone meant by a timestamp), and data frame columns that are matrices, data frames or raw vectors (§7.7). A `cbor_simple` in 20–31 (reserved, or spelled `false`/`true`/`null`/`undefined`) and an invalid `cbor_bigint` are `zucbor_invalid_argument`: the constructors validate, and the encoder validates again, because nothing stops a user building the structure by hand.
 
 A vector whose class `zucbor` does not know is encoded as its underlying type (`zujson`'s rule): a new S3 class should not be a hard failure. Since Stage 10 it first goes through `as_cbor()` (§7.5), whose default returns it unchanged, so the rule still holds when no method exists.
 
@@ -471,6 +483,9 @@ This table is part of the contract and goes into the user documentation as well.
 | `list(1L)` | `[1]`, which decodes as `I(1L)` | Not as a list; CBOR → R → CBOR is exact |
 | `list()` | `[]`, which decodes as `logical(0)` | Not as a list |
 | `NA` | `null`, decodes as `NULL` or `NA` | Not as a typed `NA` |
+| Data frame row names | dropped (§7.7) | No |
+| Data frame factor columns | their labels, as text | Not as factors |
+| Data frame column order | each row's keys in deterministic order; decoded in first-seen order | Not the order |
 
 What *does* round-trip is stated as a property and tested as one (§16): for any CBOR item `b` in deterministic form that decodes under the defaults, `cbor_encode(cbor_decode(b))` is `b`, except where one of the rows above applies. The one-element and boolean rules of §6.3 exist to make that true.
 
@@ -494,6 +509,12 @@ Stage 12. `cbor_encode(..., typed_arrays = FALSE)`, off by default (roadmap prin
 - vectors with a class (factor, `POSIXct`, `Date`, `cbor_bigint`) keep their usual form.
 
 The plan said "length two or more"; it became "written as an array", so that a decoded one-element typed array, marked `I()`, re-encodes as one. Measured on 10^6 elements (§17): a `double` vector is 8.0 MB against 8.9 MB, encodes in 33 ms against 70 and decodes in 27 ms against 214; an `integer` vector is 4.0 MB against 4.9 MB, 14 ms against 48 and 18 ms against 190.
+
+### 7.7 Data frames on encode
+
+Stage 14. A data frame (any object inheriting `data.frame`) is an array of one map per row, keyed by the column names, as `zujson` writes one (`zujson` §6). Every row has the same keys, so they are sorted once (§8) and shared. A cell is what the same element of its column would be in a vector (§7.1), so `NA` is `null`, a factor is its label and a `Date` is tag 1004; a list column's cell is encoded as a value, unboxed by the usual rule. Row names are dropped. A column of a class the encoder does not know goes through `as_cbor()` whole, once, and must come back a vector. Columns that are matrices or data frames, and raw columns, are `zucbor_unsupported_type`; column names follow §7.2. The depth charged is the array's and its row maps', so a frame of scalars needs `max_depth` 2.
+
+The rows-of-maps form is the one JSON APIs and SenML use, so it is what other decoders expect; the column-oriented alternative (a map of arrays) is one `as.list()` away for a caller who wants it.
 
 ---
 
@@ -580,6 +601,7 @@ Threat model: **the input is hostile**, and so is anything a peer can influence 
 |---|---|---|
 | `max_size` | 64 MiB | before the check phase; while reading in `cbor_read()`; per item with `cbor_read_seq(each =)` |
 | `max_depth` | 256, at most 1023 | check phase, at each container or tag entry |
+| `max_cells` | 1e7 | build phase, per data frame, before it is allocated, with `data_frame = TRUE` (§6.10) |
 | `max_items` | 1e6 | check phase, per data item, including every string chunk; summed over a sequence, except per top-level item with `cbor_read_seq(each =)` |
 
 **Depth counts containers and tags, not values.** The root array is level 1; a scalar inside it is no level of its own; a tag is one level. The encoder charges depth identically, so `cbor_encode()` cannot emit what `cbor_decode()` at the same `max_depth` refuses — output the package will not read back is the worst bug shape available (`zujson` §9).
@@ -864,6 +886,7 @@ The decode gain is the check phase's and the build's per-item work disappearing:
 | 30 | UUID, IP address, decimal fraction | Recipes in the examples article, not built-in classes (Stage 10) |
 | 31 | CBOR inside binary framing | `cbor_decode_prefix()`: first item checked and decoded, the rest not read (§5, Stage 11) |
 | 32 | RFC 8746 typed arrays | Decoded always (§6.9); encoded only with `typed_arrays = TRUE`, as tags 78, 86 and 1040, little-endian (§7.6, Stage 12) |
+| 33 | Data frames | Encoded as an array of row maps (§7.7); decoded opt-in with `data_frame = TRUE`, bounded by `max_cells` (§6.10, Stage 14) |
 
 ---
 
@@ -871,7 +894,7 @@ The decode gain is the check phase's and the build's per-item work disappearing:
 
 1. **CTAP2 canonical order.** CTAP2 requires RFC 7049 length-first key order; RFC 8949 deterministic encoding is bytewise. They differ (e.g. `24` versus `-1`). Decoding CTAP2 data needs nothing, since signatures cover bytes, not re-encodings. An authenticator emulator would need a `key_order` argument. Add it when a caller asks. Deferred again in [roadmap.md](roadmap.md) (Stages 10–16).
 2. ~~**UUID and URI tags.**~~ Closed at Stage 10: neither becomes a class. `tag_handlers` and `as_cbor()` let a caller convert any tag, and the examples article carries recipes for UUIDs, IP addresses and decimal fractions. Decision 30.
-3. **Data frames.** Encode row-oriented as `zujson` does, and decode arrays of text-keyed maps opt-in. Deferred to keep v1's mapping small; SenML users are the likely askers. Planned as Stage 14 of [roadmap.md](roadmap.md), inside v1.
+3. ~~**Data frames.**~~ Closed at Stage 14: encoded row-oriented as `zujson` does, and arrays of text-keyed maps decoded opt-in, bounded by `max_cells`. Decision 33.
 4. ~~**Validation offsets.**~~ Closed at Stage 8: UTF-8 and tag content are checked by the walk and have offsets; only deterministic-encoding faults, from TinyCBOR's validator, have `offset = NA`. Validating per item from the walk would recover it at some cost to throughput. Measure first.
 5. **The bignum conversion cap** (128 bytes, §6.6). Revisit if a protocol uses larger integers as numbers rather than as opaque bytes.
 6. **A C API for siblings.** `zucrypt` (COSE signing) or `zuhttp` (`application/cbor`) may want CBOR from C. Design it only once one of them has a concrete need, following `zukomp`'s registered-table pattern (`zujson` §15).

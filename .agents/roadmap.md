@@ -499,7 +499,7 @@ A numeric vector of a million elements is a million CBOR items today. RFC 8746 w
 
 ## Stage 14 — Data frames · M
 
-**Status:** not started.
+**Status:** done, 2026-10-04 (#34). Design §6.10, §7.7, §11; decision 33.
 
 The one refusal of Stages 0–9 that was scope rather than impossibility (§7.3, §19 Q3).
 
@@ -515,6 +515,15 @@ The one refusal of Stages 0–9 that was scope rather than impossibility (§7.3,
 - Data frames round-trip modulo the documented losses (row names, factor levels, column order).
 - The budget refuses a quadratic input before allocating.
 - An RFC 8428 SenML example decodes to a frame in the examples article.
+
+**What actually happened**
+
+- The proposed decisions held. A row is a map that decoded to a named list with every key text, so a map with an empty or repeated key, or with keys stringified by `map_keys = "string"`, is not one, and an array holding anything but rows decodes as before. `[]` stays `logical(0)`.
+- **Columns simplify by the cells' CBOR kinds, not their R types.** The builder marks a row as a kind of its own (`K_ROW`, "other" to the lattice) and keeps the kinds its values were built with, so each column goes through the same `simplify_staged()` an array does: a float and a wide integer in one column stay a list, though both are doubles in R. Simplifying in R after the fact would have lost that.
+- `max_cells` (default 1e7) is checked once the key union is known, before any column is allocated. The union is a hash table of R's cached CHARSXP pointers, which the input cannot choose. It is a build-phase check, so it has no `GUARD` marker (the mutation tool covers the walk); a test pins the boundary at exactly `max_cells`.
+- The elements of a multi-dimensional array never become a frame, so a matrix of maps stays a matrix.
+- Encoding sorts the column names once and writes every row with them. A column of an unknown class goes through `as_cbor()` whole; matrix, data frame and raw columns are refused. The losses are row names, factor levels and column order, now rows of design §7.4.
+- The examples article decodes RFC 8428's SenML example to a frame, and shows `cbor_read_seq(each =)` from Stage 15.
 
 ---
 

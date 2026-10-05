@@ -314,7 +314,7 @@ Detection is ours (§3). Keys are compared by **value**, not by encoded bytes, b
 
 - integers by value, including across major type and width;
 - text and byte strings by content, after joining chunks;
-- floats by value after widening to double; `NaN` equals `NaN` for this purpose;
+- floats by the bit pattern of their value widened to double, with every `NaN` one key: so `1.0` as a half and as a double are one key, and `0.0` and `-0.0`, which are different values that compare equal in C, are two (settled before 0.1.0, #47);
 - simple values and booleans by value;
 - arrays, maps and tagged keys by their encoded bytes. Two such keys equal in value but encoded differently are **not** detected. `deterministic = TRUE` closes the gap, since it rejects the non-shortest encoding first.
 
@@ -366,7 +366,7 @@ UUIDs (37) and URIs (32) arrive as `cbor_tag`, and stay that way: Stage 10 settl
 
 ### 6.7 Dates and times
 
-Tag 0 text is parsed by a project-owned RFC 3339 reader, not `strptime()`, so the result does not vary by platform or locale. Offsets are applied and the result is an instant in UTC, with fractional seconds kept. Calendar arithmetic uses Howard Hinnant's civil-date algorithm, as `zujson` does.
+Tag 0 text is parsed by a project-owned RFC 3339 reader, not `strptime()`, so the result does not vary by platform or locale. The check phase runs the same reader (`zu_time.c` uses no R API), so tag 0 text that is not an RFC 3339 date/time, and tag 1004 text that is not a full-date, are `ZU_ERR_INVALID_DATE` (`zucbor_invalid_error`, with the innermost tag's offset, guard `date-content`) from `cbor_validate()` and every decoder alike, under any `tags` and with a handler: until #47 the build phase checked it, so `tags = "keep"` and a handler read such text, and `cbor_validate()` said `TRUE`. Offsets are applied and the result is an instant in UTC, with fractional seconds kept. Calendar arithmetic uses Howard Hinnant's civil-date algorithm, as `zujson` does.
 
 ### 6.8 Valid CBOR R cannot hold
 
@@ -462,7 +462,7 @@ Vectors follow `zujson`: a length-1 atomic vector is a scalar unless `I()`-wrapp
 
 ### 7.3 What cannot be encoded
 
-`zucbor_unsupported_type`, for complex, closures, environments, external pointers, S4 objects, `POSIXlt` (a list of eleven fields, never what anyone meant by a timestamp), and data frame columns that are matrices, data frames or raw vectors (§7.7). A `cbor_simple` in 20–31 (reserved, or spelled `false`/`true`/`null`/`undefined`) and an invalid `cbor_bigint` are `zucbor_invalid_argument`: the constructors validate, and the encoder validates again, because nothing stops a user building the structure by hand.
+`zucbor_unsupported_type`, for complex, closures, environments, external pointers, S4 objects, `POSIXlt` (a list of eleven fields, never what anyone meant by a timestamp), and data frame columns that are matrices, data frames or raw vectors (§7.7). A `cbor_simple` in 20–31 (reserved, or spelled `false`/`true`/`null`/`undefined`) and an invalid `cbor_bigint` are `zucbor_invalid_argument`: the constructors validate, and the encoder validates again, because nothing stops a user building the structure by hand. So does a hand-built object of the wrong storage: a `cbor_tag` or `cbor_map` that is not a list of two, a `cbor_simple` that is not `integer`, a `cbor_bigint` that is not `character` (#47). A `cbor_tag` whose content the check phase would refuse is `zucbor_invalid_argument` too (§8).
 
 A vector whose class `zucbor` does not know is encoded as its underlying type (`zujson`'s rule): a new S3 class should not be a hard failure. Since Stage 10 it first goes through `as_cbor()` (§7.5), whose default returns it unchanged, so the rule still holds when no method exists.
 
@@ -486,6 +486,10 @@ This table is part of the contract and goes into the user documentation as well.
 | Data frame row names | dropped (§7.7) | No |
 | Data frame factor columns | their labels, as text | Not as factors |
 | Data frame column order | each row's keys in deterministic order; decoded in first-seen order | Not the order |
+| `cbor_tag(55799, v)` | written as given; the decoder strips the self-describe tag | Decodes as `v` |
+| `POSIXct` with a `tzone` other than UTC | the instant, as tag 1 | The instant, in UTC |
+| Attributes other than names, `dim` and class | dropped | No |
+| `cbor_bigint` within 2^53, or a `cbor_tag(2, ...)`/`cbor_tag(3, ...)` that fits 64 bits | a plain integer (§8) | Decodes as `integer` or `double` |
 
 What *does* round-trip is stated as a property and tested as one (§16): for any CBOR item `b` in deterministic form that decodes under the defaults, `cbor_encode(cbor_decode(b))` is `b`, except where one of the rows above applies. The one-element and boolean rules of §6.3 exist to make that true.
 
@@ -526,7 +530,10 @@ The rows-of-maps form is the one JSON APIs and SenML use, so it is what other de
 2. definite lengths only;
 3. floats in the shortest of half, single and double that represents the value **exactly**; `NaN` as `0xf97e00`, `±Inf` as half;
 4. map entries sorted by the **bytewise lexicographic order of their encoded keys**;
-5. no duplicate keys.
+5. no duplicate keys;
+6. bignums (tags 2 and 3) in preferred serialization (RFC 8949 §3.4.3): no leading zero bytes, and a plain integer when the value fits 64 bits, whether written from a `cbor_bigint` or a `cbor_tag()`.
+
+A `cbor_tag()`, built by hand or returned by an `as_cbor()` method, may hold anything, so its content is checked once written, against the rules the check phase applies to input: the tag-content table of §11 (one function, `zu_tag_content_ok()` in `zu_check.h`, for both), the date text of tags 0 and 1004 (§6.7), the element size of a typed array and the shape of tags 40 and 1040 (§6.9). A tag whose content breaks one is `zucbor_invalid_argument`. Until #47 the encoder checked only the tag number, and wrote bytes its own decoder refused.
 
 The encoder is project code, `src/zu_encode.c` (§3 says why not TinyCBOR's). One routine runs twice over the R value:
 
@@ -630,8 +637,9 @@ A limit is a positive whole number, or `Inf` for `max_size` and `max_items` (the
 | 0, 32–36, 1004 | text string |
 | 1 | integer or float |
 | 2, 3, 24 | byte string |
-| 4, 5, 16–18, 96–98 | array |
+| 4, 5, 16–18, 40, 96–98, 1040 | array |
 | 100 | integer |
+| 64–87 except 76 (typed arrays) | byte string |
 | any other, including 21–23 and 55799 | anything |
 
 Status `CborErrorInappropriateTagForType`, class `zucbor_invalid_error`, with the tag's offset.
@@ -729,7 +737,7 @@ src/zu_cbor.h                 internal prototypes that take TinyCBOR types
 src/zu_encode.c               §7, §8
 src/zu_float.c                width selection, half conversion
 src/zu_bigint.c               decimal <-> magnitude
-src/zu_time.c                 RFC 3339, civil dates
+src/zu_time.c                 RFC 3339, civil dates; R-free, shared with the check phase
 src/zu_diag.c                 diagnostic notation, and the float formatter it and map keys share
 src/zu_config.h               constants shared with TinyCBOR-facing code; no R headers
 src/zu_tinycbor_check.c       build fails if ZU_MAX_DEPTH_CAP != CBOR_PARSER_MAX_RECURSIONS

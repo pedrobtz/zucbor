@@ -64,3 +64,37 @@ test_that("every encoding is deterministic and repeatable", {
   }, NA)
   expect_true(all(ok), info = paste(which(!ok), collapse = " "))
 })
+
+test_that("every cbor_tag either encodes deterministically or is refused", {
+  # design section 8 and section 20, criterion 5: random content under the
+  # tags whose content is restricted, built directly and by as_cbor().
+  local_as_cbor("zu_test_tagged", function(x, ...) cbor_tag(attr(x, "tag"), unclass(x)[[1]]))
+  set.seed(8746)
+  tags <- c(0, 1, 2, 3, 4, 18, 24, 32, 40, 64, 65, 85, 100, 1004, 1040, 6, 55799)
+  contents <- list(
+    function() sample.int(1e6, 1) - 5e5,
+    function() stats::runif(1),
+    function() "x",
+    function() "2024-02-29",
+    function() "2013-03-21T20:04:00Z",
+    function() as.raw(sample.int(256, sample.int(12, 1)) - 1L),
+    function() as.raw(c(0, sample.int(256, sample.int(12, 1)) - 1L)),
+    function() raw(),
+    function() list(1L, "a"),
+    function() list(c(2L, 2L), 1:4),
+    function() list(c(2L, 2L), 1:3),
+    function() list(I(2L), cbor_tag(64, as.raw(1:2))),
+    function() NULL,
+    function() cbor_tag(6, 1L)
+  )
+  outcome <- vapply(1:600, function(i) {
+    v <- cbor_tag(sample(tags, 1), contents[[sample.int(length(contents), 1)]]())
+    if (i %% 2 == 0) v <- structure(list(v$value), tag = v$tag, class = "zu_test_tagged")
+    if (i %% 3 == 0) v <- list(v, 1L)
+    a <- tryCatch(cbor_encode(v), zucbor_invalid_argument = function(e) NULL)
+    if (is.null(a)) return("refused")
+    if (identical(cbor_encode(v), a) && cbor_validate(a, deterministic = TRUE)) "ok" else "bad"
+  }, "")
+  expect_false(any(outcome == "bad"), info = paste(which(outcome == "bad"), collapse = " "))
+  expect_true(all(c("ok", "refused") %in% outcome))
+})

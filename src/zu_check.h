@@ -103,6 +103,38 @@ static inline int zu_typed_size(uint64_t tag)
     return (tag & 16) ? 2 << (tag & 3) : 1 << (tag & 3);
 }
 
+/* The kind of an item, as far as the tag-content table cares: the walk
+ * derives it from TinyCBOR's type, the encoder from the initial byte it
+ * wrote, so both apply one table (design sections 8 and 11). */
+enum {
+    ZU_KIND_INT, ZU_KIND_BYTES, ZU_KIND_TEXT, ZU_KIND_ARRAY, ZU_KIND_MAP,
+    ZU_KIND_TAG, ZU_KIND_FLOAT, ZU_KIND_OTHER
+};
+
+/* The content kinds RFC 8949 and RFC 8943 require under the tags that
+ * restrict them: TinyCBOR's knownTagData with two corrections -- tag 1 also
+ * takes a float, and 21-23 take any item -- plus 100 and 1004, which zucbor
+ * converts. A tag not listed may wrap anything. */
+static inline int zu_tag_content_ok(uint64_t tag, int kind)
+{
+    switch (tag) {
+    case 0: case 32: case 33: case 34: case 35: case 36: case 1004:
+        return kind == ZU_KIND_TEXT;
+    case 1:
+        return kind == ZU_KIND_INT || kind == ZU_KIND_FLOAT;
+    case 2: case 3: case 24:
+        return kind == ZU_KIND_BYTES;
+    case 4: case 5: case 16: case 17: case 18: case 96: case 97: case 98:
+    case 40: case 1040:
+        return kind == ZU_KIND_ARRAY;
+    case 100:
+        return kind == ZU_KIND_INT;
+    default:
+        /* RFC 8746 typed arrays: a byte string. */
+        return !zu_typed_size(tag) || kind == ZU_KIND_BYTES;
+    }
+}
+
 /* zu_status.c: the enumerator name of a CborError, or NULL for a value no
  * enumerator has; and every status a fault can carry, for R's class map. */
 const char *zu_cbor_status_name(int err);
@@ -113,5 +145,14 @@ const char *zu_status_at(size_t i);
 double zu_half_to_double(uint16_t half);
 int zu_double_to_half(double d, uint16_t *out);
 int zu_utf8_valid(const uint8_t *s, size_t n);
+
+/* zu_time.c: no R API either, so the check phase can validate the text
+ * of tags 0 and 1004 (design section 6.7). Each returns 0 on success. */
+int zu_parse_rfc3339(const char *s, size_t len, double *secs);
+int zu_parse_full_date(const char *s, size_t len, double *days);
+int zu_format_full_date(double days, char *buf);
+/* Nonzero if s is valid content for tag 0 (an RFC 3339 date/time) or tag
+ * 1004 (an RFC 3339 full-date). */
+int zu_date_text_ok(uint64_t tag, const char *s, size_t len);
 
 #endif

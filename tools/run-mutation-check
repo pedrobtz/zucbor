@@ -14,7 +14,7 @@ fail=0
 
 build() {  # build DIR OUT
   $CC -std=gnu17 -O1 -DZU_STANDALONE -I"$1" -I"$1/tinycbor" -I"$1/vendor/tinycbor" \
-    fuzz/probe.c fuzz/arena.c "$1/zu_walk.c" "$1/zu_status.c" "$1/zu_float.c" \
+    fuzz/probe.c fuzz/arena.c "$1/zu_walk.c" "$1/zu_status.c" "$1/zu_float.c" "$1/zu_time.c" \
     "$1/vendor/tinycbor/cborparser.c" "$1/vendor/tinycbor/cborvalidation.c" \
     "$1/vendor/tinycbor/cborerrorstrings.c" -o "$2"
 }
@@ -28,6 +28,7 @@ depth-tags|c6c6c6c6c600|0 0 0 3 1000|ZU_ERR_DEPTH_LIMIT
 length-headers|9bffffffffffffffff|0 0 0 256 1000|CborErrorUnexpectedEOF
 bignum-preferred|c24101|0 1 0 256 1000|ZU_ERR_BIGNUM_NOT_PREFERRED
 tag-content|c16161|0 0 0 256 1000|CborErrorInappropriateTagForType
+date-content|c06161|0 0 0 256 1000|ZU_ERR_INVALID_DATE
 trailing-bytes|0102|0 0 0 256 1000|CborErrorGarbageAtEnd
 utf8|61ff|0 0 0 256 1000|CborErrorInvalidUtf8TextString
 typed-array-length|d8564101|0 0 0 256 1000|ZU_ERR_TYPED_ARRAY

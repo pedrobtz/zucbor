@@ -619,8 +619,8 @@ static SEXP build_tag(zu_builder *b, CborValue *it, int *kind)
         size_t n;
         const char *s = read_text(b, it, &n);
         double secs;
-        if (zu_parse_rfc3339(s, n, &secs))
-            fail_build(b, ZU_ERR_INVALID_DATE, "tag 0 content is not an RFC 3339 date/time", at);
+        if (zu_parse_rfc3339(s, n, &secs))     /* the check refused it */
+            internal(b, CborErrorInternalError, at);
         *kind = K_POSIXCT;
         return classed_real(secs, NULL, 1);
     }
@@ -655,8 +655,8 @@ static SEXP build_tag(zu_builder *b, CborValue *it, int *kind)
         size_t n;
         const char *s = read_text(b, it, &n);
         double days;
-        if (zu_parse_full_date(s, n, &days))
-            fail_build(b, ZU_ERR_INVALID_DATE, "tag 1004 content is not an RFC 3339 full-date", at);
+        if (zu_parse_full_date(s, n, &days))   /* the check refused it */
+            internal(b, CborErrorInternalError, at);
         *kind = K_DATE;
         return classed_real(days, "Date", 0);
     }
@@ -1202,7 +1202,9 @@ static SEXP build_map(zu_builder *b, CborValue *it, int *kind)
     if (faithful || b->map_keys == KEYS_STRING) {
         Rf_setAttrib(values, R_NamesSymbol, names);
         out = values;
-        if (value_kinds && all_text) {
+        /* A row has unique, non-empty text keys (design section 6.10):
+         * under "string", an empty key leaves faithful unset. */
+        if (value_kinds && all_text && faithful) {
             *kind = K_ROW;
             b->row_kinds = value_kinds;
         }

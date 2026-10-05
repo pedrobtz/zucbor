@@ -571,6 +571,170 @@ static void check_depth(zu_encoder *e, int depth)
         fail_encode(e, ZU_ERR_DEPTH_LIMIT, NULL);
 }
 
+/* ---- tag content (design section 8) --------------------------------------------- */
+
+/* A cbor_tag may hold anything, so its content is checked once written,
+ * against the rules the check phase applies to input: what is written must
+ * be accepted by cbor_validate(deterministic = TRUE). The content is the
+ * encoder's own output, definite-length and well-formed, so reading it back
+ * needs no bounds beyond the heads it has just written. */
+
+/* The head at e->out + *pos: returns its major type, sets *v to its
+ * argument (a float's bits, for major type 7) and moves *pos past it. */
+static int read_head(const zu_encoder *e, size_t *pos, uint64_t *v)
+{
+    uint8_t ib = e->out[(*pos)++];
+    int ai = ib & 31;
+    *v = 0;
+    if (ai < 24) {
+        *v = (uint64_t) ai;
+    } else {
+        int n = 1 << (ai - 24);     /* the encoder writes only 24-27 */
+        for (int i = 0; i < n; i++)
+            *v = (*v << 8) | e->out[(*pos)++];
+    }
+    return ib >> 5;
+}
+
+static int kind_of_byte(uint8_t ib)
+{
+    static const int kinds[] = {
+        ZU_KIND_INT, ZU_KIND_INT, ZU_KIND_BYTES, ZU_KIND_TEXT,
+        ZU_KIND_ARRAY, ZU_KIND_MAP, ZU_KIND_TAG
+    };
+    int major = ib >> 5, ai = ib & 31;
+    if (major < 7)
+        return kinds[major];
+    return ai >= 25 && ai <= 27 ? ZU_KIND_FLOAT : ZU_KIND_OTHER;
+}
+
+/* Tags 2 and 3 in preferred serialization (RFC 8949 section 3.4.3), as
+ * put_bigint() writes them: no leading zero bytes, and a plain integer when
+ * the magnitude fits 8 bytes. The bytes from tag_start are rewritten. */
+static void prefer_bignum(zu_encoder *e, uint64_t tag, size_t tag_start, size_t at)
+{
+    size_t p = at;
+    uint64_t len;
+    read_head(e, &p, &len);
+    size_t skip = 0;
+    while (skip < len && e->out[p + skip] == 0)
+        skip++;
+    size_t n = (size_t) len - skip;
+    if (skip == 0 && n > 8)
+        return;
+    if (n <= 8) {
+        uint64_t v = 0;
+        for (size_t i = 0; i < n; i++)
+            v = (v << 8) | e->out[p + skip + i];
+        e->pos = tag_start;
+        put_head(e, tag == 2 ? 0 : 1, v);
+    } else {
+        uint8_t *m = (uint8_t *) R_alloc(n, 1);
+        memcpy(m, e->out + p + skip, n);
+        e->pos = tag_start;
+        put_head(e, 6, tag);
+        put_head(e, 2, n);
+        put(e, m, n);
+    }
+}
+
+/* RFC 8746 section 3.1: the content of tag 40 or 1040 is [dimensions,
+ * elements], the dimensions a non-empty array of unsigned integers, the
+ * elements an array or one typed array, as many as the dimensions'
+ * product. The same rules as the walk's array-parts and array-shape. */
+static int ndarray_ok(const zu_encoder *e, size_t at)
+{
+    size_t p = at;
+    uint64_t v;
+    read_head(e, &p, &v);
+    if (v != 2 || e->out[p] >> 5 != 4)
+        return 0;
+    uint64_t nd, product = 1;
+    read_head(e, &p, &nd);
+    if (nd == 0)
+        return 0;
+    for (uint64_t k = 0; k < nd; k++) {
+        if (e->out[p] >> 5 != 0)
+            return 0;
+        read_head(e, &p, &v);
+        product = v && product > UINT64_MAX / v ? UINT64_MAX : product * v;
+    }
+    uint64_t count;
+    int major = read_head(e, &p, &v);
+    if (major == 4) {
+        count = v;
+    } else if (major == 6) {
+        int size = zu_typed_size(v);
+        if (!size || e->out[p] >> 5 != 2)
+            return 0;
+        read_head(e, &p, &v);
+        if (v % (uint64_t) size)
+            return 0;
+        count = v / (uint64_t) size;
+    } else {
+        return 0;
+    }
+    return count == product;
+}
+
+/* The content of tag number tag, written from offset at, after its head at
+ * tag_start. */
+static void check_tag_content(zu_encoder *e, uint64_t tag, size_t tag_start, size_t at)
+{
+    if (!zu_tag_content_ok(tag, kind_of_byte(e->out[at])))
+        fail_encode(e, ZU_ERR_INVALID_VALUE,
+                    "a cbor_tag's content is not of the type its tag number requires");
+    size_t p = at;
+    uint64_t len;
+    switch (tag) {
+    case 0:
+    case 1004:
+        read_head(e, &p, &len);
+        if (!zu_date_text_ok(tag, (const char *) e->out + p, (size_t) len))
+            fail_encode(e, ZU_ERR_INVALID_VALUE, tag == 0
+                        ? "a cbor_tag 0 does not hold an RFC 3339 date/time"
+                        : "a cbor_tag 1004 does not hold an RFC 3339 full-date");
+        return;
+    case 2:
+    case 3:
+        prefer_bignum(e, tag, tag_start, at);
+        return;
+    case 40:
+    case 1040:
+        if (!ndarray_ok(e, at))
+            fail_encode(e, ZU_ERR_INVALID_VALUE, "a cbor_tag 40 or 1040 does not hold "
+                        "[dimensions, elements] of a matching shape");
+        return;
+    default: {
+        int size = zu_typed_size(tag);
+        if (size) {
+            read_head(e, &p, &len);
+            if (len % (uint64_t) size)
+                fail_encode(e, ZU_ERR_INVALID_VALUE,
+                            "a typed array's length is not a whole number of elements");
+        }
+    }
+    }
+}
+
+/* cbor_simple, cbor_bigint, cbor_tag and cbor_map are built by hand as well
+ * as by their constructors (design section 7.3), so the storage each class
+ * needs is checked before it is relied on. */
+static void check_storage(zu_encoder *e, SEXP x)
+{
+    if (!Rf_isObject(x))
+        return;
+    if (is_class(x, "cbor_simple") && TYPEOF(x) != INTSXP)
+        fail_encode(e, ZU_ERR_INVALID_VALUE, "a cbor_simple is not an integer vector");
+    if (is_class(x, "cbor_bigint") && TYPEOF(x) != STRSXP)
+        fail_encode(e, ZU_ERR_INVALID_VALUE, "a cbor_bigint is not a character vector");
+    if ((is_class(x, "cbor_tag") || is_class(x, "cbor_map")) &&
+        (TYPEOF(x) != VECSXP || XLENGTH(x) != 2))
+        fail_encode(e, ZU_ERR_INVALID_VALUE, is_class(x, "cbor_tag")
+                    ? "a cbor_tag is not a list of a tag number and a value"
+                    : "a cbor_map is not a list of keys and values");
+}
+
 /* ---- as_cbor() ------------------------------------------------------------------ */
 
 /* Classes cbor_encode() writes itself, or refuses itself. "AsIs" only marks
@@ -641,6 +805,7 @@ static void put_frame(zu_encoder *e, SEXP x, int depth)
                             "as_cbor() for a data frame column must return a vector");
         }
         SET_VECTOR_ELT(cols, j, col);
+        check_storage(e, col);
         if (is_class(col, "data.frame") || has_dim(col))
             fail_encode(e, ZU_ERR_UNSUPPORTED_TYPE,
                         "a data frame column that is a matrix or a data frame has no CBOR form");
@@ -716,6 +881,7 @@ static void encode_value(zu_encoder *e, SEXP x, int depth, int may_convert)
         }
         UNPROTECT(1);
     }
+    check_storage(e, x);
     switch (TYPEOF(x)) {
     case NILSXP:
         put_byte(e, 0xf6);
@@ -766,8 +932,11 @@ static void encode_value(zu_encoder *e, SEXP x, int depth, int may_convert)
                          ? Rf_asReal(t) : NA_REAL;
             if (!(tag >= 0 && tag <= 9007199254740992.0 && tag == trunc(tag)))
                 fail_encode(e, ZU_ERR_INVALID_VALUE, "a cbor_tag number is not a whole number from 0 to 2^53");
+            size_t tag_start = e->pos;
             put_head(e, 6, (uint64_t) tag);
+            size_t at = e->pos;
             encode(e, VECTOR_ELT(x, 1), depth + 1);
+            check_tag_content(e, (uint64_t) tag, tag_start, at);
             return;
         }
         if (is_class(x, "cbor_map")) {

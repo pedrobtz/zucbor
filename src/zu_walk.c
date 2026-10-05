@@ -465,28 +465,19 @@ static int walk_string(zu_walker *w, CborValue *it, int want_content,
     return 0;
 }
 
-/* The content types RFC 8949 and RFC 8943 require under the tags that
- * restrict them: TinyCBOR's knownTagData with two corrections -- tag 1 also
- * takes a float, and 21-23 take any item -- plus 100 and 1004, which zucbor
- * converts. A tag not listed may wrap anything. */
-static int tag_content_ok(CborTag tag, CborType type)
+/* An item's kind for the tag-content table (zu_tag_content_ok() in
+ * zu_check.h, which the encoder applies too). */
+static int kind_of(CborType type)
 {
-    switch (tag) {
-    case 0: case 32: case 33: case 34: case 35: case 36: case 1004:
-        return type == CborTextStringType;
-    case 1:
-        return type == CborIntegerType || type == CborHalfFloatType ||
-               type == CborFloatType || type == CborDoubleType;
-    case 2: case 3: case 24:
-        return type == CborByteStringType;
-    case 4: case 5: case 16: case 17: case 18: case 96: case 97: case 98:
-    case 40: case 1040:
-        return type == CborArrayType;
-    case 100:
-        return type == CborIntegerType;
-    default:
-        /* RFC 8746 typed arrays: a byte string. */
-        return !zu_typed_size(tag) || type == CborByteStringType;
+    switch (type) {
+    case CborIntegerType: return ZU_KIND_INT;
+    case CborByteStringType: return ZU_KIND_BYTES;
+    case CborTextStringType: return ZU_KIND_TEXT;
+    case CborArrayType: return ZU_KIND_ARRAY;
+    case CborMapType: return ZU_KIND_MAP;
+    case CborTagType: return ZU_KIND_TAG;
+    case CborHalfFloatType: case CborFloatType: case CborDoubleType: return ZU_KIND_FLOAT;
+    default: return ZU_KIND_OTHER;
     }
 }
 
@@ -506,6 +497,7 @@ static int walk_element(zu_walker *w, CborValue *it)
     int key = at_key(w);
     int tags = 0;
     CborTag tag = 0;
+    const uint8_t *tag_at = NULL;   /* the innermost tag */
     CborError err;
 
     if (w->sp)
@@ -519,12 +511,12 @@ static int walk_element(zu_walker *w, CborValue *it)
                               cbor_value_get_next_byte(it));
         w->depth++;
         tags++;
-        const uint8_t *tag_at = cbor_value_get_next_byte(it);
+        tag_at = cbor_value_get_next_byte(it);
         cbor_value_get_tag(it, &tag);
         err = cbor_value_advance_fixed(it);
         if (err)
             return fail_cbor(w, err, cbor_value_get_next_byte(it));
-        if (!tag_content_ok(tag, cbor_value_get_type(it)))  /* GUARD: tag-content */
+        if (!zu_tag_content_ok(tag, kind_of(cbor_value_get_type(it))))  /* GUARD: tag-content */
             return fail_cbor(w, CborErrorInappropriateTagForType, tag_at);
     }
     if (count_item(w, cbor_value_get_next_byte(it)))
@@ -548,10 +540,18 @@ static int walk_element(zu_walker *w, CborValue *it)
         size_t total;
         int bignum = w->opt->deterministic && tags && (tag == 2 || tag == 3) &&
                      type == CborByteStringType;
-        if (walk_string(w, it, k != NULL || bignum, &content, &total))
+        /* RFC 8949 section 3.4.1 and RFC 8943: date text that does not
+         * parse is invalid, so the check refuses it whatever the decoder's
+         * tags and handlers would do with it (design section 6.7). */
+        int date = tags && (tag == 0 || tag == 1004) && type == CborTextStringType;
+        if (walk_string(w, it, k != NULL || bignum || date, &content, &total))
             return 1;
         if (bignum && check_bignum(w, content, total, start))
             return 1;
+        if (date && !zu_date_text_ok(tag, (const char *) content, total))  /* GUARD: date-content */
+            return fail(w, ZU_ERR_INVALID_DATE, tag == 0
+                        ? "tag 0 content is not an RFC 3339 date/time"
+                        : "tag 1004 content is not an RFC 3339 full-date", tag_at);
         int size = tags && type == CborByteStringType ? zu_typed_size(tag) : 0;
         if (size) {
             if (total % (size_t) size)  /* GUARD: typed-array-length */

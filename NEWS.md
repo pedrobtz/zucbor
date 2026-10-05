@@ -1,4 +1,4 @@
-# zucbor 0.0.0.9000
+# zucbor 0.1.0
 
 * Initial CRAN release.
 * `cbor_decode()`, `cbor_decode_seq()`, `cbor_read()` and `cbor_read_seq()`

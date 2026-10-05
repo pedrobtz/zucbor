@@ -337,7 +337,7 @@ The core. Everything after it relies on what this stage guarantees.
 | 2 | No R object is allocated before the check phase has passed | Structural: the check phase (`zu_walk.c`) compiles with no R headers at all (`-DZU_STANDALONE`, the fuzz build), so it *cannot* allocate an R object. Behavioural: `test-limits.R`, a nine-byte header claiming 2^64 − 1 elements and a `max_items` flood, both refused |
 | 3 | Every oversized, deep, truncated or malformed input fails through a classed `zucbor_error` with its status; none crashes, hangs or reaches R's allocator unbounded | `test-validate.R` (every Appendix F example; all 426 truncations of Appendix A), `test-conformance.R` (QCBOR's 122 vectors), `test-limits.R`; libFuzzer's `fuzz_check` under ASan and UBSan (`hardening.yaml`); `tools/sanitizer-exercise.R` in the ASan containers; `tools/run-mutation-check` |
 | 4 | Duplicate keys are rejected by value by default | `test-duplicate-keys.R`, every comparison class (`1` against `0x1801`, half against double `1.0`, chunked against definite strings); the `duplicate-keys` mutation case |
-| 5 | Encoding is deterministic: byte-identical across calls, sessions and platforms, and accepted by `cbor_validate(deterministic = TRUE)` | `test-encode.R`, a checked-in 645-byte encoding compared on every CI platform; `test-roundtrip.R`, 300 generated values each encoded twice and validated deterministic |
+| 5 | Encoding is deterministic: byte-identical across calls, sessions and platforms, and accepted by `cbor_validate(deterministic = TRUE)` | `test-encode.R`, a checked-in 645-byte encoding compared on every CI platform; `test-roundtrip.R`, 300 generated values each encoded twice and validated deterministic, and 600 `cbor_tag()`s of random content, direct and from `as_cbor()`, each refused or validated deterministic (added after #47 found the encoder writing tag content the check refused) |
 | 6 | RFC 8949 Appendix A passes in both directions; every Appendix F example is rejected | `test-decode.R` (every Appendix A value, `identical()`), `test-roundtrip.R`, `test-diagnose.R` (the RFC's own diagnostic column, 79 of 81 exactly, the bignum rows explained), `test-validate.R`; `tools/run-conformance` over `cbor/test-vectors` itself |
 | 7 | Every documented mapping row has a test, and the three copies of each table agree | `test-decode.R`, `test-encode.R` and `test-classes.R` against the tables in `?cbor_decode`, `?cbor_encode` and design §6–§7. Agreement of the three copies is checked by review, not by a tool |
 | 8 | The §16 round-trip properties hold across the corpus | `test-roundtrip.R`; `test-conformance.R`: all 524 deterministic items in the COSE, CWT and WebAuthn corpora re-encode byte-exactly, including every signed or MACed structure |
@@ -581,14 +581,14 @@ The one refusal of Stages 0–9 that was scope rather than impossibility (§7.3,
 
 ## Stage 16 — Release 0.1.0 · S
 
-**Status:** ready for the human steps, 2026-10-04 (#36): `NEWS.md` lists Stages 0–15, Stage 9's table covers Stages 10–15, and `cran-comments.md` is current. What remains is below.
+**Status:** ready to tag and submit, 2026-10-05 (#36): `NEWS.md` lists Stages 0–15, Stage 9's table covers Stages 10–15, and `cran-comments.md` is current. The soundness review before release (#47) found the encoder writing `cbor_tag()` content its own check refused, tag 0 and 1004 date text checked only in the build, and hand-built objects not re-validated; all three are fixed, with the documentation gaps it listed. `DESCRIPTION` says `0.1.0` and `NEWS.md` `# zucbor 0.1.0`. What remains is the tag, the submission and the reviewers.
 
 - `NEWS.md` lists every addition under one heading (it already does, Stages 0–15).
 - Stage 9's acceptance table gains rows for Stages 10–15, each naming what verifies it.
 - The cross-platform encoding fixture still matches Stage 8's bytes, and `R CMD check --as-cran --run-donttest` is clean on every platform.
 - Tag `v0.1.0`, submit, respond. A human step.
 
-**The human steps:** `main` carries the development version `0.0.0.9000` (decided after Stage 8: the family keeps a `.9000` version on `main` between releases). At submission, set `Version: 0.1.0` and the `NEWS.md` heading to `# zucbor 0.1.0` in one commit, check once more, tag `v0.1.0` on `main`, submit to CRAN (`devtools::submit_cran()`), and respond to the reviewers. Update `cran-comments.md` first.
+**The human steps:** `main` carried the development version `0.0.0.9000` until 2026-10-05, when `Version: 0.1.0` and the `NEWS.md` heading `# zucbor 0.1.0` were set in one commit, after `cran-comments.md` was brought up to date and with #47's fixes. What remains: check once more, tag `v0.1.0` on `main`, submit to CRAN (`devtools::submit_cran()`), and respond to the reviewers. #36 closes on acceptance.
 
 **Site versions:** pkgdown's development mode (`mode: auto`) follows the version. At `0.0.0.9000` the site is built at the root and marked *unreleased*. At `0.1.0` it is a normal release site. After acceptance, bump `main` to `0.1.0.9000` with a `# zucbor 0.1.0.9000` NEWS heading: the dev site then builds into `/dev/`, and the released docs stay at the root.
 

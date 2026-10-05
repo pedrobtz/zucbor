@@ -583,7 +583,7 @@ The one refusal of Stages 0–9 that was scope rather than impossibility (§7.3,
 
 **Status:** ready for the human steps, 2026-10-04 (#36): `NEWS.md` lists Stages 0–15, Stage 9's table covers Stages 10–15, and `cran-comments.md` is current. What remains is below.
 
-- `NEWS.md` lists every addition under one heading (it already does, Stages 0–13).
+- `NEWS.md` lists every addition under one heading (it already does, Stages 0–15).
 - Stage 9's acceptance table gains rows for Stages 10–15, each naming what verifies it.
 - The cross-platform encoding fixture still matches Stage 8's bytes, and `R CMD check --as-cran --run-donttest` is clean on every platform.
 - Tag `v0.1.0`, submit, respond. A human step.

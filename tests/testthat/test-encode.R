@@ -152,6 +152,71 @@ test_that("tags and simple values", {
                class = "zucbor_invalid_argument")
 })
 
+test_that("hand-built zucbor objects of the wrong shape are refused", {
+  bad <- list(
+    structure(list(tag = 1), class = "cbor_tag"),
+    structure(list(), class = "cbor_map"),
+    structure(1:2, class = "cbor_tag"),
+    structure("k", class = "cbor_map"),
+    structure(1.5, class = "cbor_simple"),
+    structure(TRUE, class = "cbor_simple"),
+    structure(5, class = "cbor_bigint")
+  )
+  got <- fault_class(bad, cbor_encode)
+  expect_identical(unname(got), rep("zucbor_invalid_argument", length(bad)))
+  frame <- data.frame(a = 1:2)
+  frame$a <- structure(c(1.5, 2), class = "cbor_simple")
+  expect_error(cbor_encode(frame), class = "zucbor_invalid_argument")
+})
+
+test_that("a cbor_tag's content must be what its tag number requires", {
+  # design section 8: whatever cbor_encode() writes, cbor_validate() accepts.
+  bad <- list(
+    cbor_tag(0, 1L), cbor_tag(1, "x"), cbor_tag(2, 1L), cbor_tag(3, "x"),
+    cbor_tag(4, 1L), cbor_tag(18, as.raw(1)), cbor_tag(24, 1L), cbor_tag(32, 1L),
+    cbor_tag(64, 1L), cbor_tag(100, 1.5), cbor_tag(1004, 1L), cbor_tag(1040, 1L),
+    cbor_tag(1, cbor_tag(6, 1L)),
+    cbor_tag(0, "not a date"), cbor_tag(1004, "2024x"),
+    cbor_tag(65, as.raw(1:3)),                              # 3 bytes of uint16
+    cbor_tag(1040, list(c(2L, 2L), 1:3)),                   # 4 cells, 3 elements
+    cbor_tag(40, list(integer(), list())),                  # no dimensions
+    cbor_tag(40, list(I(-1L), list())),                     # a negative dimension
+    cbor_tag(40, list(I(2L), 1:2, 3L)),                     # three parts
+    cbor_tag(40, list(I(2L), "ab"))                         # elements not an array
+  )
+  got <- fault_class(bad, cbor_encode)
+  expect_identical(unname(got), rep("zucbor_invalid_argument", length(bad)))
+  # The same contents under their tags, of the right kinds, are written.
+  expect_cbor(cbor_tag(0, "2013-03-21T20:04:00Z"),
+              "c0 74 32 30 31 33 2d 30 33 2d 32 31 54 32 30 3a 30 34 3a 30 30 5a")
+  expect_cbor(cbor_tag(1, 1.5), "c1 f9 3e 00")
+  expect_cbor(cbor_tag(65, as.raw(1:4)), "d8 41 44 01 02 03 04")
+  expect_cbor(cbor_tag(1040, list(c(2L, 1L), 1:2)), "d9 04 10 82 82 02 01 82 01 02")
+  expect_cbor(cbor_tag(40, list(I(2L), cbor_tag(64, as.raw(1:2)))), "d8 28 82 81 02 d8 40 42 01 02")
+})
+
+test_that("a scalar tag's content is one value even with auto_unbox = FALSE", {
+  expect_cbor(cbor_tag(32, "a"), "d8 20 61 61", auto_unbox = FALSE)
+  expect_cbor(cbor_tag(1, 0L), "c1 00", auto_unbox = FALSE)
+  expect_cbor(cbor_tag(6, 0L), "c6 81 00", auto_unbox = FALSE)    # any content: an array
+  expect_error(cbor_encode(cbor_tag(32, I("a"))), class = "zucbor_invalid_argument")
+})
+
+test_that("a cbor_tag bignum is written in preferred form", {
+  # RFC 8949 section 3.4.3: no leading zeros, and an integer when it fits.
+  expect_cbor(cbor_tag(2, raw()), "00")
+  expect_cbor(cbor_tag(3, raw()), "20")
+  expect_cbor(cbor_tag(2, as.raw(c(0, 0, 1, 0))), "19 01 00")
+  expect_cbor(cbor_tag(3, as.raw(rep(0xff, 8))), "3b ff ff ff ff ff ff ff ff")
+  expect_cbor(cbor_tag(2, as.raw(c(0, 1, rep(0, 8)))), "c2 49 01 00 00 00 00 00 00 00 00")
+  expect_cbor(cbor_tag(3, as.raw(c(1, rep(0, 8)))), "c3 49 01 00 00 00 00 00 00 00 00")
+  expect_cbor(list(cbor_tag(2, as.raw(c(0, 5))), 1L), "82 05 01")
+  expect_cbor(cbor_map(list(cbor_tag(2, as.raw(c(0, 7)))), list(1L)), "a1 07 01")
+  for (x in list(cbor_tag(2, raw()), cbor_tag(2, as.raw(c(0, 1, rep(0, 8)))))) {
+    expect_true(cbor_validate(cbor_encode(x), deterministic = TRUE))
+  }
+})
+
 test_that("values with no CBOR form are refused", {
   matrix_column <- data.frame(a = 1)
   matrix_column$m <- matrix(1:2, 1)

@@ -33,7 +33,7 @@ for f in src/*.c; do
   $CC $FLAGS $extra $INC "$f" || fail=1
 done
 # The R-free build of the check phase, as the fuzzers compile it.
-for f in src/zu_walk.c src/zu_status.c src/zu_float.c fuzz/*.c; do
+for f in src/zu_walk.c src/zu_status.c src/zu_float.c src/zu_time.c fuzz/*.c; do
   $CC $FLAGS -DZU_STANDALONE -Isrc -Isrc/tinycbor -isystem src/vendor/tinycbor "$f" || fail=1
 done
 [ $fail = 0 ] || { echo "FAIL: warnings in project C code" >&2; exit 1; }

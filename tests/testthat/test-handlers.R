@@ -167,9 +167,9 @@ test_that("as_cbor() is not called for classes cbor_encode() knows", {
 
 test_that("a method's result is written as it is: converted once, elements again", {
   local_as_cbor("zt_a", function(x, ...) structure(list(structure(5L, class = "zt_b")), class = "zt_c"))
-  local_as_cbor("zt_b", function(x, ...) cbor_tag(98, unclass(x)))
+  local_as_cbor("zt_b", function(x, ...) cbor_tag(99, unclass(x)))
   local_as_cbor("zt_c", function(x, ...) stop("the result is not converted again"))
-  expect_cbor(structure(1L, class = "zt_a"), "81d86205")
+  expect_cbor(structure(1L, class = "zt_a"), "81d86305")
   # Same class back is refused: most likely a method that forgot to convert.
   local_as_cbor("zt_same", function(x, ...) structure(unclass(x) + 1L, class = "zt_same"))
   expect_error(cbor_encode(structure(1L, class = "zt_same")), class = "zucbor_unsupported_type")

@@ -111,7 +111,11 @@ stopifnot(identical(cbor_encode(cbor_decode(nb)), nb))
 # the middle of the build and the encoder (Stage 10).
 h <- list("99" = function(v) v, "24" = function(v) cbor_decode(v, max_depth = 4),
           "37" = function(v) stop("refused"), "0" = function(v) numeric(1e5))
-for (x in c(a, list(cbor_encode(list(cbor_tag(99, 1:3), cbor_tag(24, nb), cbor_tag(0, "x")))))) {
+# The last input is tag 0 on text that is not a date, which the check
+# refuses before any handler runs.
+for (x in c(a, list(cbor_encode(list(cbor_tag(99, 1:3), cbor_tag(24, nb),
+                                     cbor_tag(0, "2013-03-21T20:04:00Z"))),
+                    hex_raw("c0 61 78")))) {
   tryCatch(cbor_decode(x, tag_handlers = h), zucbor_error = function(e) NULL)
   tryCatch(cbor_decode_seq(x, tags = "keep", tag_handlers = h), zucbor_error = function(e) NULL)
 }

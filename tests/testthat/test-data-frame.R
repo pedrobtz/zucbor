@@ -121,6 +121,10 @@ test_that("only arrays of text-keyed maps become data frames", {
   # Duplicate keys, when allowed, make a cbor_map, which is not a row.
   d <- hex_raw("81 a2 61 61 01 61 61 02")
   expect_s3_class(cbor_decode(d, data_frame = TRUE, duplicate_keys = TRUE)[[1]], "cbor_map")
+  # Nor is a map with an empty key under map_keys = "string" (design 6.10).
+  empty <- hex_raw("81 a1 60 01")
+  expect_identical(cbor_decode(empty, data_frame = TRUE, map_keys = "string"),
+                   cbor_decode(empty, map_keys = "string"))
   # Stringified keys are not text keys.
   s <- hex_raw("81 a1 01 02")
   expect_identical(cbor_decode(s, data_frame = TRUE, map_keys = "string"), list(list("1" = 2L)))

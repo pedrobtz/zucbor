@@ -58,3 +58,13 @@ test_that("an open text-mode connection is refused", {
   on.exit(close(con))
   expect_error(cbor_read(con), class = "zucbor_invalid_argument")
 })
+
+test_that("a connection that cannot be read is an I/O error", {
+  path <- withr::local_tempfile(fileext = ".cbor")
+  for (read in list(cbor_read, cbor_read_seq, function(con) cbor_read_seq(con, each = identity))) {
+    con <- file(path, "wb")
+    e <- expect_error(read(con), class = "zucbor_io_error")
+    close(con)
+    expect_s3_class(e, "zucbor_error")
+  }
+})

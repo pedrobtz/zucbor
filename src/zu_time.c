@@ -1,7 +1,10 @@
 /* Dates and times for tags 0, 1004 and 100 (design section 6.7), without
  * strptime(), so results do not vary by platform or locale. Calendar
- * arithmetic is Howard Hinnant's days_from_civil, as in zujson. */
-#include "zucbor.h"
+ * arithmetic is Howard Hinnant's days_from_civil, as in zujson.
+ *
+ * No R API: the check phase validates tag 0 and 1004 text with these, so
+ * this file is part of the R-free build (-DZU_STANDALONE) too. */
+#include "zu_check.h"
 
 /* Days since 1970-01-01 of a proleptic Gregorian date. */
 static double days_from_civil(long y, int m, int d)
@@ -133,6 +136,12 @@ int zu_parse_rfc3339(const char *s, size_t len, double *secs)
     *secs = days_from_civil(y, m, d) * 86400.0 + (double)(hh * 3600 + mi * 60 + ss)
             - (double) offset + frac;
     return 0;
+}
+
+int zu_date_text_ok(uint64_t tag, const char *s, size_t len)
+{
+    double v;
+    return tag == 0 ? !zu_parse_rfc3339(s, len, &v) : !zu_parse_full_date(s, len, &v);
 }
 
 /* "YYYY-MM-DD" for days since the epoch, into buf (at least 11 bytes).

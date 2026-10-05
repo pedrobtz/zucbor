@@ -66,6 +66,16 @@ test_that("a faulty item stops the read after the items before it", {
   expect_identical(e$offset, 4)
 })
 
+test_that("a bad date after good items stops the read with its stream offset", {
+  x <- c(cbor_encode_seq(list(1L, 2L, 3L)), hex_raw("c0 6a"), charToRaw("not a date"))
+  seen <- integer()
+  e <- expect_error(cbor_read_seq(local_raw_con(x), each = function(i) seen <<- c(seen, i)),
+                    class = "zucbor_invalid_error")
+  expect_identical(seen, 1:3)
+  expect_identical(e$status, "ZU_ERR_INVALID_DATE")
+  expect_identical(e$offset, 3)
+})
+
 test_that("input ending inside an item is a parse error after the items before it", {
   seen <- 0
   x <- c(cbor_encode_seq(list(1L, 2L)), hex_raw("83 01 02"))

@@ -2,14 +2,17 @@
 
 0 errors | 0 warnings | 1 note
 
-* This is a new release.
+* This is a new submission.
 
 ## Test environments
 
-* GitHub Actions: macOS (R release), Windows (R release), Ubuntu (R release
-  and oldrel-1).
-* R-hub containers matching CRAN's r-devel-linux-x86_64-debian-gcc (GCC 16)
-  and -debian-clang (clang 23, `-std=gnu23`) flavours.
+CI runs through the reusable workflows of pedrobtz/r-actions on GitHub
+Actions:
+
+* macOS (R release), Windows (R release), Ubuntu (R release and oldrel-1).
+* CRAN-like r-devel containers (r-hub/containers images) matching CRAN's
+  r-devel-linux-x86_64-debian-gcc (GCC 16) and -debian-clang (clang 23,
+  `-std=gnu23`) flavours.
 * Native-code checks on every change: ASan and UBSan (gcc and clang),
   valgrind, gctorture, rchk and LTO; libFuzzer on the input checker.
 

@@ -88,6 +88,15 @@ numbers, functions, environments, external pointers, S4 objects,
 matrices, data frames or raw vectors. Names that are partly missing, \code{NA}
 or empty are \code{zucbor_invalid_argument}, and two keys that encode
 identically are \code{zucbor_duplicate_key}.
+
+A \code{\link[=cbor_tag]{cbor_tag()}} is written as given, but its content must be what
+\code{\link[=cbor_validate]{cbor_validate()}} accepts under that tag number: text under tag 0 must be
+an RFC 3339 date/time, a typed array a whole number of elements, and so
+on; anything else is \code{zucbor_invalid_argument}. Under a tag whose
+content cannot be an array, a length-one vector is one value even with
+\code{auto_unbox = FALSE}. Tags 2 and 3 are written
+in preferred form, without leading zero bytes, and as a plain integer
+when the value fits in 64 bits.
 }
 
 \section{Data frames}{
@@ -124,7 +133,11 @@ Decoding what \code{cbor_encode()} wrote gives back the value, except that:
 comes back as an integer; \code{list(1L)} and \code{1L} both encode as \code{1};
 \code{NaN} payloads are not kept; fractional days of a \code{Date} are dropped; and
 a data frame comes back, with \code{data_frame = TRUE}, without its row names,
-with factors as text, and with its columns in the encoded key order.
+with factors as text, and with its columns in the encoded key order; a
+\code{POSIXct} comes back in UTC, whatever its \code{tzone}; attributes other than
+names, \code{dim} and class are dropped; \code{cbor_tag(55799, v)} comes back as
+\code{v}; and a \code{cbor_bigint}, or a tag 2 or 3, whose value fits in 64 bits
+comes back as an integer or a double.
 }
 
 \examples{

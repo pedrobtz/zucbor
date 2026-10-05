@@ -11,7 +11,8 @@
 #'   COSE and CWT use small integers as keys, for example. `keys` and
 #'   `values` are lists of equal length, in order.
 #' * `cbor_tag()` is a tagged item: `tag` is the tag number, `value` its
-#'   content.
+#'   content. [cbor_encode()] refuses content its tag number does not allow,
+#'   such as a number under tag 0.
 #' * `cbor_simple()` is a simple value other than `false`, `true`, `null` and
 #'   `undefined`: 0 to 19 or 32 to 255.
 #' * `cbor_bigint()` is an integer outside what a double holds exactly,

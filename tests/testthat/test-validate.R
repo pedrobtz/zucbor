@@ -102,3 +102,29 @@ test_that("error = TRUE returns TRUE invisibly on valid input", {
   expect_invisible(cbor_validate(hex_raw("01"), error = TRUE))
   expect_true(cbor_validate(hex_raw("01"), error = TRUE))
 })
+
+test_that("date text that does not parse is invalid, whatever the decoder would do", {
+  # RFC 8949 section 3.4.1, RFC 8943: the check owns this (design 6.7).
+  t0 <- c(hex_raw("c0 6a"), charToRaw("not a date"))
+  d <- c(hex_raw("d9 03 ec 65"), charToRaw("2024x"))
+  late <- c(hex_raw("82 01"), t0)                    # the tag at offset 2
+  for (x in list(t0, d)) {
+    expect_false(cbor_validate(x))
+    e <- expect_error(cbor_validate(x, error = TRUE), class = "zucbor_invalid_error")
+    expect_identical(e$status, "ZU_ERR_INVALID_DATE")
+    expect_identical(e$offset, 0)
+    expect_error(cbor_decode(x, tags = "keep"), class = "zucbor_invalid_error")
+    expect_error(cbor_decode(x, tag_handlers = list("0" = identity, "1004" = identity)),
+                 class = "zucbor_invalid_error")
+  }
+  e <- expect_error(cbor_validate(late, error = TRUE), class = "zucbor_invalid_error")
+  expect_identical(e$offset, 2)
+  # Under the self-describe tag, the innermost tag is the one at fault.
+  e <- expect_error(cbor_validate(c(hex_raw("d9 d9 f7"), t0), error = TRUE),
+                    class = "zucbor_invalid_error")
+  expect_identical(e$offset, 3)
+  # Chunked text is joined before it is parsed.
+  ok <- c(hex_raw("d9 03 ec 7f 64"), charToRaw("2024"), hex_raw("66"), charToRaw("-02-29"), hex_raw("ff"))
+  expect_true(cbor_validate(ok))
+  expect_identical(cbor_decode(ok), as.Date("2024-02-29"))
+})

@@ -238,6 +238,13 @@ test_that("decoding refuses what validation refuses, with the same class", {
   expect_error(cbor_decode(hex_raw("83 01 02 03"), max_items = 3), class = "zucbor_item_limit")
   expect_error(cbor_decode(hex_raw("83 01 02 03"), max_size = 3), class = "zucbor_size_limit")
   expect_error(cbor_decode(hex_raw("18 01"), deterministic = TRUE), class = "zucbor_deterministic_error")
+  dates <- list(c(hex_raw("c0 6a"), charToRaw("not a date")), c(hex_raw("d9 03 ec 65"), charToRaw("2024x")))
+  for (x in dates) {
+    v <- expect_error(cbor_validate(x, error = TRUE), class = "zucbor_invalid_error")
+    d <- expect_error(cbor_decode(x), class = "zucbor_invalid_error")
+    expect_identical(d$status, v$status)
+    expect_identical(d$offset, v$offset)
+  }
 })
 
 test_that("decode arguments are checked", {

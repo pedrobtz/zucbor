@@ -42,7 +42,8 @@ values back.
 COSE and CWT use small integers as keys, for example. \code{keys} and
 \code{values} are lists of equal length, in order.
 \item \code{cbor_tag()} is a tagged item: \code{tag} is the tag number, \code{value} its
-content.
+content. \code{\link[=cbor_encode]{cbor_encode()}} refuses content its tag number does not allow,
+such as a number under tag 0.
 \item \code{cbor_simple()} is a simple value other than \code{false}, \code{true}, \code{null} and
 \code{undefined}: 0 to 19 or 32 to 255.
 \item \code{cbor_bigint()} is an integer outside what a double holds exactly,

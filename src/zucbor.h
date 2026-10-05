@@ -18,13 +18,10 @@ SEXP zu_fault_sexp(const zu_fault *fault);
 
 void zu_format_double(double d, char *buf);   /* buf >= 40 bytes */
 
-/* ---- zu_bigint.c, zu_time.c ---------------------------------------------- */
+/* ---- zu_bigint.c (zu_time.c is declared in zu_check.h) -------------------- */
 
 size_t zu_u64_to_dec(uint64_t v, char *buf);
 const char *zu_magnitude_to_dec(const uint8_t *mag, size_t n, int add_one, int negative);
-int zu_parse_rfc3339(const char *s, size_t len, double *secs);
-int zu_parse_full_date(const char *s, size_t len, double *days);
-int zu_format_full_date(double days, char *buf);
 const uint8_t *zu_dec_to_magnitude(const char *dec, size_t *n);
 
 /* ---- .Call entry points, registered in init.c ----------------------------- */

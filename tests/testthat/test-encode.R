@@ -195,6 +195,13 @@ test_that("a cbor_tag's content must be what its tag number requires", {
   expect_cbor(cbor_tag(40, list(I(2L), cbor_tag(64, as.raw(1:2)))), "d8 28 82 81 02 d8 40 42 01 02")
 })
 
+test_that("a scalar tag's content is one value even with auto_unbox = FALSE", {
+  expect_cbor(cbor_tag(32, "a"), "d8 20 61 61", auto_unbox = FALSE)
+  expect_cbor(cbor_tag(1, 0L), "c1 00", auto_unbox = FALSE)
+  expect_cbor(cbor_tag(6, 0L), "c6 81 00", auto_unbox = FALSE)    # any content: an array
+  expect_error(cbor_encode(cbor_tag(32, I("a"))), class = "zucbor_invalid_argument")
+})
+
 test_that("a cbor_tag bignum is written in preferred form", {
   # RFC 8949 section 3.4.3: no leading zeros, and an integer when it fits.
   expect_cbor(cbor_tag(2, raw()), "00")

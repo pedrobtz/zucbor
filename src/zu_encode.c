@@ -935,7 +935,15 @@ static void encode_value(zu_encoder *e, SEXP x, int depth, int may_convert)
             size_t tag_start = e->pos;
             put_head(e, 6, (uint64_t) tag);
             size_t at = e->pos;
-            encode(e, VECTOR_ELT(x, 1), depth + 1);
+            /* Under a tag whose content cannot be an array, a length-one
+             * vector is its one value whatever auto_unbox says: an array
+             * of one would be refused, so it has no other form. */
+            SEXP content = VECTOR_ELT(x, 1);
+            int unbox = e->auto_unbox;
+            if (!zu_tag_content_ok((uint64_t) tag, ZU_KIND_ARRAY) && Rf_isVectorAtomic(content))
+                e->auto_unbox = 1;
+            encode(e, content, depth + 1);
+            e->auto_unbox = unbox;
             check_tag_content(e, (uint64_t) tag, tag_start, at);
             return;
         }

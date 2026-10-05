@@ -533,7 +533,7 @@ The rows-of-maps form is the one JSON APIs and SenML use, so it is what other de
 5. no duplicate keys;
 6. bignums (tags 2 and 3) in preferred serialization (RFC 8949 §3.4.3): no leading zero bytes, and a plain integer when the value fits 64 bits, whether written from a `cbor_bigint` or a `cbor_tag()`.
 
-A `cbor_tag()`, built by hand or returned by an `as_cbor()` method, may hold anything, so its content is checked once written, against the rules the check phase applies to input: the tag-content table of §11 (one function, `zu_tag_content_ok()` in `zu_check.h`, for both), the date text of tags 0 and 1004 (§6.7), the element size of a typed array and the shape of tags 40 and 1040 (§6.9). A tag whose content breaks one is `zucbor_invalid_argument`. Until #47 the encoder checked only the tag number, and wrote bytes its own decoder refused.
+A `cbor_tag()`, built by hand or returned by an `as_cbor()` method, may hold anything, so its content is checked once written, against the rules the check phase applies to input: the tag-content table of §11 (one function, `zu_tag_content_ok()` in `zu_check.h`, for both), the date text of tags 0 and 1004 (§6.7), the element size of a typed array and the shape of tags 40 and 1040 (§6.9). A tag whose content breaks one is `zucbor_invalid_argument`. Under a tag whose content cannot be an array (tag 32, say), a length-one vector is written as its one value whatever `auto_unbox` says, since an array of one has no valid form there; `I()` still asks for the array, and is refused. Until #47 the encoder checked only the tag number, and wrote bytes its own decoder refused.
 
 The encoder is project code, `src/zu_encode.c` (§3 says why not TinyCBOR's). One routine runs twice over the R value:
 

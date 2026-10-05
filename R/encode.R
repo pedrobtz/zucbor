@@ -46,7 +46,9 @@
 #' A [cbor_tag()] is written as given, but its content must be what
 #' [cbor_validate()] accepts under that tag number: text under tag 0 must be
 #' an RFC 3339 date/time, a typed array a whole number of elements, and so
-#' on; anything else is `zucbor_invalid_argument`. Tags 2 and 3 are written
+#' on; anything else is `zucbor_invalid_argument`. Under a tag whose
+#' content cannot be an array, a length-one vector is one value even with
+#' `auto_unbox = FALSE`. Tags 2 and 3 are written
 #' in preferred form, without leading zero bytes, and as a plain integer
 #' when the value fits in 64 bits.
 #'

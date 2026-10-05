@@ -49,6 +49,9 @@ An object of class `cbor_map`, `cbor_tag`, `cbor_simple` or
 
 - `cbor_tag()` is a tagged item: `tag` is the tag number, `value` its
   content.
+  [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
+  refuses content its tag number does not allow, such as a number under
+  tag 0.
 
 - `cbor_simple()` is a simple value other than `false`, `true`, `null`
   and `undefined`: 0 to 19 or 32 to 255.

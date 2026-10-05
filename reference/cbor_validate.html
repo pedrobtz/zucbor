@@ -15,7 +15,7 @@ as a text string containing U+0000."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">zucbor</a>
 
-    <small class="nav-text text-danger me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Unreleased version">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -122,7 +122,10 @@ error.</p>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>The check covers well-formedness (RFC 8949 section 3), UTF-8 in text
-strings, the content type of the tags TinyCBOR knows, duplicate map keys
+strings, the content of the tags RFC 8949, RFC 8943 and RFC 8746
+restrict (their content type, the date text of tags 0 and 1004, the
+length of a typed array, the shape of a multi-dimensional array),
+duplicate map keys
 (compared by value, so <code>1</code> encoded in one byte and in two is the same key),
 and the limits.</p>
     </div>

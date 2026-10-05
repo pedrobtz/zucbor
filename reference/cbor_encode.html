@@ -15,7 +15,7 @@ each value exactly; and map entries sorted by their encoded keys."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">zucbor</a>
 
-    <small class="nav-text text-danger me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Unreleased version">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -130,6 +130,14 @@ numbers, functions, environments, external pointers, S4 objects,
 matrices, data frames or raw vectors. Names that are partly missing, <code>NA</code>
 or empty are <code>zucbor_invalid_argument</code>, and two keys that encode
 identically are <code>zucbor_duplicate_key</code>.</p>
+<p>A <code><a href="cbor-values.html">cbor_tag()</a></code> is written as given, but its content must be what
+<code><a href="cbor_validate.html">cbor_validate()</a></code> accepts under that tag number: text under tag 0 must be
+an RFC 3339 date/time, a typed array a whole number of elements, and so
+on; anything else is <code>zucbor_invalid_argument</code>. Under a tag whose
+content cannot be an array, a length-one vector is one value even with
+<code>auto_unbox = FALSE</code>. Tags 2 and 3 are written
+in preferred form, without leading zero bytes, and as a plain integer
+when the value fits in 64 bits.</p>
     </div>
     <div class="section level2">
     <h2 id="data-frames">Data frames<a class="anchor" aria-label="anchor" href="#data-frames"></a></h2>
@@ -168,7 +176,11 @@ written and read several times faster.</p>
 comes back as an integer; <code>list(1L)</code> and <code>1L</code> both encode as <code>1</code>;
 <code>NaN</code> payloads are not kept; fractional days of a <code>Date</code> are dropped; and
 a data frame comes back, with <code>data_frame = TRUE</code>, without its row names,
-with factors as text, and with its columns in the encoded key order.</p>
+with factors as text, and with its columns in the encoded key order; a
+<code>POSIXct</code> comes back in UTC, whatever its <code>tzone</code>; attributes other than
+names, <code>dim</code> and class are dropped; <code>cbor_tag(55799, v)</code> comes back as
+<code>v</code>; and a <code>cbor_bigint</code>, or a tag 2 or 3, whose value fits in 64 bits
+comes back as an integer or a double.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

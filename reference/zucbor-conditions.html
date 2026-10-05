@@ -11,7 +11,7 @@ class below inherits from zucbor_error."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">zucbor</a>
 
-    <small class="nav-text text-danger me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Unreleased version">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -97,6 +97,10 @@ data frame.</p></dd>
 <dd><p>A function in <code><a href="cbor_decode.html">cbor_decode()</a></code>'s
 <code>tag_handlers</code> raised an error. The condition carries <code>tag</code>, the tag
 number, and <code>parent</code>, the error the handler raised.</p></dd>
+
+<dt><code>zucbor_io_error</code></dt>
+<dd><p><code><a href="cbor_read.html">cbor_read()</a></code> or <code><a href="cbor_read.html">cbor_read_seq()</a></code> could not
+read from its connection. The message includes R's own.</p></dd>
 
 <dt><code>zucbor_limit_error</code></dt>
 <dd><p>A limit was reached. The subclasses

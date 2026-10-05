@@ -56,6 +56,13 @@ class below inherits from `zucbor_error`.
   `tag_handlers` raised an error. The condition carries `tag`, the tag
   number, and `parent`, the error the handler raised.
 
+- `zucbor_io_error`:
+
+  [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
+  or
+  [`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
+  could not read from its connection. The message includes R's own.
+
 - `zucbor_limit_error`:
 
   A limit was reached. The subclasses `zucbor_depth_limit`,

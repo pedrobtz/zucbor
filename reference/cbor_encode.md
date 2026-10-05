@@ -102,6 +102,18 @@ frame columns that are matrices, data frames or raw vectors. Names that
 are partly missing, `NA` or empty are `zucbor_invalid_argument`, and two
 keys that encode identically are `zucbor_duplicate_key`.
 
+A
+[`cbor_tag()`](https://pedrobtz.github.io/zucbor/reference/cbor-values.md)
+is written as given, but its content must be what
+[`cbor_validate()`](https://pedrobtz.github.io/zucbor/reference/cbor_validate.md)
+accepts under that tag number: text under tag 0 must be an RFC 3339
+date/time, a typed array a whole number of elements, and so on; anything
+else is `zucbor_invalid_argument`. Under a tag whose content cannot be
+an array, a length-one vector is one value even with
+`auto_unbox = FALSE`. Tags 2 and 3 are written in preferred form,
+without leading zero bytes, and as a plain integer when the value fits
+in 64 bits.
+
 ## Data frames
 
 A data frame is written row by row, as `zujson` writes one: an array of
@@ -138,7 +150,11 @@ Decoding what `cbor_encode()` wrote gives back the value, except that:
 comes back as an integer; `list(1L)` and `1L` both encode as `1`; `NaN`
 payloads are not kept; fractional days of a `Date` are dropped; and a
 data frame comes back, with `data_frame = TRUE`, without its row names,
-with factors as text, and with its columns in the encoded key order.
+with factors as text, and with its columns in the encoded key order; a
+`POSIXct` comes back in UTC, whatever its `tzone`; attributes other than
+names, `dim` and class are dropped; `cbor_tag(55799, v)` comes back as
+`v`; and a `cbor_bigint`, or a tag 2 or 3, whose value fits in 64 bits
+comes back as an integer or a double.
 
 ## See also
 

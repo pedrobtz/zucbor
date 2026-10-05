@@ -11,7 +11,7 @@ values back."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">zucbor</a>
 
-    <small class="nav-text text-danger me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Unreleased version">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -96,7 +96,8 @@ integer simple values.</p></dd>
 COSE and CWT use small integers as keys, for example. <code>keys</code> and
 <code>values</code> are lists of equal length, in order.</p></li>
 <li><p><code>cbor_tag()</code> is a tagged item: <code>tag</code> is the tag number, <code>value</code> its
-content.</p></li>
+content. <code><a href="cbor_encode.html">cbor_encode()</a></code> refuses content its tag number does not allow,
+such as a number under tag 0.</p></li>
 <li><p><code>cbor_simple()</code> is a simple value other than <code>false</code>, <code>true</code>, <code>null</code> and
 <code>undefined</code>: 0 to 19 or 32 to 255.</p></li>
 <li><p><code>cbor_bigint()</code> is an integer outside what a double holds exactly,

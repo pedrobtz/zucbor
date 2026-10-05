@@ -52,7 +52,10 @@ as a text string containing U+0000.
 }
 \details{
 The check covers well-formedness (RFC 8949 section 3), UTF-8 in text
-strings, the content type of the tags TinyCBOR knows, duplicate map keys
+strings, the content of the tags RFC 8949, RFC 8943 and RFC 8746
+restrict (their content type, the date text of tags 0 and 1004, the
+length of a typed array, the shape of a multi-dimensional array),
+duplicate map keys
 (compared by value, so \code{1} encoded in one byte and in two is the same key),
 and the limits.
 }

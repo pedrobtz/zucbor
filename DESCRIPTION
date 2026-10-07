@@ -7,7 +7,9 @@ Authors@R: c(
     person("Intel Corporation", role = "cph",
            comment = "TinyCBOR, bundled in src/vendor/tinycbor"))
 Description: Encodes R values as Concise Binary Object Representation
-    (CBOR, RFC 8949) and decodes CBOR into ordinary R vectors and lists.
+    (CBOR, RFC 8949; Bormann and Hoffman (2020)
+    <doi:10.17487/RFC8949>) and decodes CBOR into ordinary R vectors and
+    lists.
     Decoding checks the whole input against configurable depth, size and
     item limits before any R object is built, so untrusted input from
     network peers and devices cannot drive large allocations. Encoding is

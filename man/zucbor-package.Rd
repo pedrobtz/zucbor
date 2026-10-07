@@ -6,7 +6,7 @@
 \alias{zucbor-package}
 \title{zucbor: Deterministic and Secure CBOR Encoding and Decoding}
 \description{
-Encodes R values as Concise Binary Object Representation (CBOR, RFC 8949) and decodes CBOR into ordinary R vectors and lists. Decoding checks the whole input against configurable depth, size and item limits before any R object is built, so untrusted input from network peers and devices cannot drive large allocations. Encoding is deterministic: identical R objects always produce identical bytes. Uses a bundled copy of the 'TinyCBOR' library (\url{https://github.com/intel/tinycbor}), so no system library is required.
+Encodes R values as Concise Binary Object Representation (CBOR, RFC 8949; Bormann and Hoffman (2020) \doi{10.17487/RFC8949}) and decodes CBOR into ordinary R vectors and lists. Decoding checks the whole input against configurable depth, size and item limits before any R object is built, so untrusted input from network peers and devices cannot drive large allocations. Encoding is deterministic: identical R objects always produce identical bytes. Uses a bundled copy of the 'TinyCBOR' library (\url{https://github.com/intel/tinycbor}), so no system library is required.
 }
 \seealso{
 Useful links:

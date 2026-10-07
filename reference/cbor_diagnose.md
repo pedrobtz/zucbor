@@ -81,7 +81,7 @@ to turn CBOR into R values.
 cbor_diagnose(as.raw(c(0xa2, 0x61, 0x61, 0x01, 0x61, 0x62, 0x82, 0x02, 0x03)))
 #> [1] "{\"a\": 1, \"b\": [2, 3]}"
 cbor_diagnose(cbor_encode(list(when = Sys.Date(), pi = pi, bytes = as.raw(1:4))))
-#> [1] "{\"pi\": 3.141592653589793, \"when\": 1004(\"2026-10-05\"), \"bytes\": h'01020304'}"
+#> [1] "{\"pi\": 3.141592653589793, \"when\": 1004(\"2026-10-07\"), \"bytes\": h'01020304'}"
 cbor_diagnose(as.raw(c(0x01, 0xf9, 0x3e, 0x00)), sequence = TRUE)
 #> [1] "1, 1.5"
 ```

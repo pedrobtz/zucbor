@@ -18,6 +18,15 @@ The individual source files carry Intel Corporation notices dated 2016,
 text is in src/vendor/tinycbor/LICENSE, which is an unmodified copy of
 upstream's LICENSE file.
 
+TinyCBOR was written principally by Thiago Macieira. Other authors of code
+in the bundled files, by upstream's git history at tag v7.0: Koen Zandberg,
+lightyear15, Kal Conley, Hamilton Chapman, Peter A. Jonsson,
+Frederic-Philippe Metz, alradmsft, phirsov, Florian Larysch, Dmitry
+Shachnev, piotreklc60, Michael Richardson, TSonono, Philippe Coval, Otavio
+Pontes, Fabrice Fontaine, Mårten Nordheim, Leandro Pereira, James Prestwood,
+Giuseppe D'Angelo, Samuel Debionne, mkm, Marc Mutz, Maciej Jurczak, Florian
+Warzecha and Erich Keane.
+
 Upstream:  https://github.com/intel/tinycbor
 Version:   7.0 (tag v7.0)
 Details:   src/vendor/PROVENANCE

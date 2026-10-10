@@ -23,6 +23,7 @@ Useful links:
 Authors:
 \itemize{
   \item Pedro Baltazar \email{pedrobtz@gmail.com} [copyright holder]
+  \item Thiago Macieira (Author of the bundled TinyCBOR library)
 }
 
 Other contributors:

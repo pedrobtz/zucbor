@@ -27,7 +27,8 @@ CRAN.
 The package bundles a subset of TinyCBOR 7.0 (MIT licence, Intel
 Corporation) in `src/vendor/tinycbor/`, unmodified and verifiable against the
 upstream release; provenance is in `src/vendor/PROVENANCE`, and copyright
-holders are listed in `Authors@R` and `inst/COPYRIGHTS`.
+holders are listed in `Authors@R` and `inst/COPYRIGHTS`. TinyCBOR's principal
+author, Thiago Macieira, is listed in `Authors@R` as an author.
 
 Building from source needs a C compiler; with GCC, version 11 or newer, since
 TinyCBOR 7.0 uses a construct older GCC rejects. Every CRAN check flavour

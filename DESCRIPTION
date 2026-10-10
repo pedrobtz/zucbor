@@ -4,6 +4,8 @@ Version: 0.1.0
 Authors@R: c(
     person("Pedro", "Baltazar", , "pedrobtz@gmail.com",
            role = c("aut", "cre", "cph")),
+    person("Thiago", "Macieira", role = "aut",
+           comment = "Author of the bundled TinyCBOR library"),
     person("Intel Corporation", role = "cph",
            comment = "TinyCBOR, bundled in src/vendor/tinycbor"))
 Description: Encodes R values as Concise Binary Object Representation

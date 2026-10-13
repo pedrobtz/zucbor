@@ -50,6 +50,8 @@ A string with an \code{http}, \code{https}, \code{ftp}, \code{ftps} or \code{fil
 with \code{\link[=url]{url()}}, any other string as a file path. A connection that is not
 open is opened in \code{"rb"} mode and closed afterwards; an open one must be
 binary, is read from its current position, and is left open.
+A URL or file that cannot be opened, such as one that answers HTTP 404,
+fails with \code{zucbor_io_error}.
 }
 
 \examples{

@@ -38,7 +38,8 @@ data frame.}
 \code{tag_handlers} raised an error. The condition carries \code{tag}, the tag
 number, and \code{parent}, the error the handler raised.}
 \item{\code{zucbor_io_error}}{\code{\link[=cbor_read]{cbor_read()}} or \code{\link[=cbor_read_seq]{cbor_read_seq()}} could not
-read from its connection. The message includes R's own.}
+open its file or URL, or read from its connection. The message
+includes R's own.}
 \item{\code{zucbor_limit_error}}{A limit was reached. The subclasses
 \code{zucbor_depth_limit}, \code{zucbor_size_limit}, \code{zucbor_item_limit} and
 \code{zucbor_cell_limit} name which one.}

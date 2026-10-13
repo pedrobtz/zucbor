@@ -107,7 +107,9 @@ item. An error in <code>each</code> propagates unchanged and stops the read too.
 <p>A string with an <code>http</code>, <code>https</code>, <code>ftp</code>, <code>ftps</code> or <code>file</code> scheme is read
 with <code><a href="https://rdrr.io/r/base/connections.html" class="external-link">url()</a></code>, any other string as a file path. A connection that is not
 open is opened in <code>"rb"</code> mode and closed afterwards; an open one must be
-binary, is read from its current position, and is left open.</p>
+binary, is read from its current position, and is left open.
+A URL or file that cannot be opened, such as one that answers HTTP 404,
+fails with <code>zucbor_io_error</code>.</p>
     </div>
 
     <div class="section level2">
@@ -134,7 +136,7 @@ binary, is read from its current position, and is left open.</p>
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Pedro Baltazar.</p>
+  <p>Developed by Pedro Baltazar, Thiago Macieira.</p>
 </div>
 
 <div class="pkgdown-footer-right">

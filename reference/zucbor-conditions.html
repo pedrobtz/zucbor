@@ -100,7 +100,8 @@ number, and <code>parent</code>, the error the handler raised.</p></dd>
 
 <dt><code>zucbor_io_error</code></dt>
 <dd><p><code><a href="cbor_read.html">cbor_read()</a></code> or <code><a href="cbor_read.html">cbor_read_seq()</a></code> could not
-read from its connection. The message includes R's own.</p></dd>
+open its file or URL, or read from its connection. The message
+includes R's own.</p></dd>
 
 <dt><code>zucbor_limit_error</code></dt>
 <dd><p>A limit was reached. The subclasses
@@ -131,7 +132,7 @@ argument's name, such as <code>"max_depth"</code>, and <code>limit_value</code>.
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Pedro Baltazar.</p>
+  <p>Developed by Pedro Baltazar, Thiago Macieira.</p>
 </div>
 
 <div class="pkgdown-footer-right">

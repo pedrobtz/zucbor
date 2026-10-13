@@ -44,7 +44,7 @@
 <h2 class="pkg-version" data-toc-text="0.1.0" id="zucbor-010">zucbor 0.1.0<a class="anchor" aria-label="anchor" href="#zucbor-010"></a></h2>
 <ul><li>Initial CRAN release.</li>
 <li>
-<code><a href="../reference/cbor_decode.html">cbor_decode()</a></code>, <code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code>, <code><a href="../reference/cbor_read.html">cbor_read()</a></code> and <code><a href="../reference/cbor_read.html">cbor_read_seq()</a></code> turn CBOR (RFC 8949) and CBOR sequences (RFC 8742) into ordinary R values. The whole input is checked first – well-formedness, UTF-8, tag content, duplicate map keys (by value), and depth, size and item limits – so a length header can never make R allocate for data the input does not hold. Every fault is a classed condition inheriting <code>zucbor_error</code>.</li>
+<code><a href="../reference/cbor_decode.html">cbor_decode()</a></code>, <code><a href="../reference/cbor_decode.html">cbor_decode_seq()</a></code>, <code><a href="../reference/cbor_read.html">cbor_read()</a></code> and <code><a href="../reference/cbor_read.html">cbor_read_seq()</a></code> turn CBOR (RFC 8949) and CBOR sequences (RFC 8742) into ordinary R values. The whole input is checked first – well-formedness, UTF-8, tag content, duplicate map keys (by value), and depth, size and item limits – so a length header can never make R allocate for data the input does not hold. Every fault is a classed condition inheriting <code>zucbor_error</code>. A URL or file that cannot be opened is a <code>zucbor_io_error</code> naming the cause (<code>HTTP status was '404 Not Found'</code>), with no stray warning.</li>
 <li>
 <code><a href="../reference/cbor_encode.html">cbor_encode()</a></code> and <code><a href="../reference/cbor_encode.html">cbor_encode_seq()</a></code> write RFC 8949 core deterministic encoding: identical R objects give identical bytes on every platform, and decoding then re-encoding deterministic input reproduces it exactly.</li>
 <li>
@@ -67,7 +67,7 @@
 
 
     <footer><div class="pkgdown-footer-left">
-  <p>Developed by Pedro Baltazar.</p>
+  <p>Developed by Pedro Baltazar, Thiago Macieira.</p>
 </div>
 
 <div class="pkgdown-footer-right">

@@ -13,7 +13,9 @@
   content, duplicate map keys (by value), and depth, size and item
   limits – so a length header can never make R allocate for data the
   input does not hold. Every fault is a classed condition inheriting
-  `zucbor_error`.
+  `zucbor_error`. A URL or file that cannot be opened is a
+  `zucbor_io_error` naming the cause
+  (`HTTP status was '404 Not Found'`), with no stray warning.
 - [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
   and
   [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)

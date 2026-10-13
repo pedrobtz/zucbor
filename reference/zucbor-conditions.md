@@ -61,7 +61,8 @@ class below inherits from `zucbor_error`.
   [`cbor_read()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
   or
   [`cbor_read_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_read.md)
-  could not read from its connection. The message includes R's own.
+  could not open its file or URL, or read from its connection. The
+  message includes R's own.
 
 - `zucbor_limit_error`:
 

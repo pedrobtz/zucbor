@@ -28,6 +28,8 @@ Authors:
 
 - Pedro Baltazar <pedrobtz@gmail.com> \[copyright holder\]
 
+- Thiago Macieira (Author of the bundled TinyCBOR library)
+
 Other contributors:
 
 - Intel Corporation (TinyCBOR, bundled in src/vendor/tinycbor)

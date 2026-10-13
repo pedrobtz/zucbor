@@ -19,10 +19,13 @@
 # the connection lives exactly as long as the caller's frame.
 #
 # `what` names the argument in error messages. `abort(arg, message)` raises
-# the package's own classed invalid-argument condition; the default is a
-# plain error with `prefix`, for a package that has none.
+# the package's own classed invalid-argument condition, and `fail(message)`
+# its I/O condition, for a URL or file that cannot be opened; the defaults
+# are plain errors with `prefix`, for a package that has none.
 zu_open_input <- function(x, what = "path", prefix = "zuxml",
                           abort = function(arg, message)
+                            stop(paste0(prefix, ": ", message), call. = FALSE),
+                          fail = function(message)
                             stop(paste0(prefix, ": ", message), call. = FALSE)) {
   if (!inherits(x, "connection")) {
     if (!is.character(x) || length(x) != 1L || is.na(x))
@@ -39,12 +42,44 @@ zu_open_input <- function(x, what = "path", prefix = "zuxml",
     }
   }
   if (!isOpen(x)) {
-    open(x, "rb")
+    zu_open_rb(x, fail)
     return(list(con = x, close = TRUE))
   }
   if (!identical(summary(x)$text, "binary"))
     abort(what, "an open connection must be in binary mode (\"rb\")")
   list(con = x, close = FALSE)
+}
+
+# open(x, "rb"), with a failure raised through `fail`. R reports a failed
+# open as a warning that names the cause ("HTTP status was '404 Not
+# Found'", "Permission denied") followed by an error that does not, so the
+# warning becomes the message. The connection that could not be opened is
+# destroyed, rather than left for the garbage collector to warn about.
+zu_open_rb <- function(x, fail) {
+  why <- character()
+  ok <- tryCatch(
+    withCallingHandlers(
+      {
+        open(x, "rb")
+        TRUE
+      },
+      warning = function(w) {
+        why <<- c(why, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }
+    ),
+    error = function(e) {
+      why <<- c(why, conditionMessage(e))
+      FALSE
+    }
+  )
+  if (!ok) {
+    try(close(x), silent = TRUE)
+    fail(why[[1L]])
+  }
+  # An open that succeeded keeps its warnings.
+  for (w in why) warning(w, call. = FALSE)
+  invisible(x)
 }
 
 # The rest of a connection as one raw vector, for the cases that cannot be

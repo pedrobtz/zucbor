@@ -36,7 +36,8 @@
 #'     `tag_handlers` raised an error. The condition carries `tag`, the tag
 #'     number, and `parent`, the error the handler raised.}
 #'   \item{`zucbor_io_error`}{[cbor_read()] or [cbor_read_seq()] could not
-#'     read from its connection. The message includes R's own.}
+#'     open its file or URL, or read from its connection. The message
+#'     includes R's own.}
 #'   \item{`zucbor_limit_error`}{A limit was reached. The subclasses
 #'     `zucbor_depth_limit`, `zucbor_size_limit`, `zucbor_item_limit` and
 #'     `zucbor_cell_limit` name which one.}

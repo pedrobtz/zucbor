@@ -68,3 +68,16 @@ test_that("a connection that cannot be read is an I/O error", {
     expect_s3_class(e, "zucbor_error")
   }
 })
+
+test_that("a URL that cannot be opened is an I/O error, without a warning", {
+  # A file:// URL is opened as a URL connection and fails, as an HTTP 404
+  # does, without needing the network.
+  missing <- paste0("file://", file.path(tempdir(), "no-such-file.cbor"))
+  for (read in list(cbor_read, cbor_read_seq, function(f) cbor_read_seq(f, each = identity))) {
+    before <- nrow(showConnections(all = TRUE))
+    expect_no_warning(e <- tryCatch(read(missing), error = identity))
+    expect_s3_class(e, "zucbor_io_error")
+    expect_s3_class(e, "zucbor_error")
+    expect_identical(nrow(showConnections(all = TRUE)), before)
+  }
+})

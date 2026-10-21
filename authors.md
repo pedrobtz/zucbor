@@ -13,7 +13,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/pedrobtz/zucbor/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/pedrobtz/zucbor/blob/0.1.0/DESCRIPTION)
 
 Baltazar P, Macieira T (2026). *zucbor: Deterministic and Secure CBOR
 Encoding and Decoding*. R package version 0.1.0,

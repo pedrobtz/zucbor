@@ -68,8 +68,7 @@ A string with an `http`, `https`, `ftp`, `ftps` or `file` scheme is read
 with [`url()`](https://rdrr.io/r/base/connections.html), any other
 string as a file path. A connection that is not open is opened in `"rb"`
 mode and closed afterwards; an open one must be binary, is read from its
-current position, and is left open. A URL or file that cannot be opened,
-such as one that answers HTTP 404, fails with `zucbor_io_error`.
+current position, and is left open.
 
 ## Examples
 

@@ -2,6 +2,8 @@
 
 ## zucbor 0.1.0
 
+CRAN release: 2026-10-21
+
 - Initial CRAN release.
 - [`cbor_decode()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md),
   [`cbor_decode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_decode.md),
@@ -13,9 +15,7 @@
   content, duplicate map keys (by value), and depth, size and item
   limits – so a length header can never make R allocate for data the
   input does not hold. Every fault is a classed condition inheriting
-  `zucbor_error`. A URL or file that cannot be opened is a
-  `zucbor_io_error` naming the cause
-  (`HTTP status was '404 Not Found'`), with no stray warning.
+  `zucbor_error`.
 - [`cbor_encode()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)
   and
   [`cbor_encode_seq()`](https://pedrobtz.github.io/zucbor/reference/cbor_encode.md)

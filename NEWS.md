@@ -1,3 +1,9 @@
+# zucbor (development version)
+
+* `cbor_read()` and `cbor_read_seq()`: a URL or file that cannot be opened
+  is a `zucbor_io_error` naming the cause (`HTTP status was '404 Not Found'`),
+  with no stray warning (#54).
+
 # zucbor 0.1.0
 
 * Initial CRAN release.
@@ -7,8 +13,6 @@
   duplicate map keys (by value), and depth, size and item limits -- so a
   length header can never make R allocate for data the input does not hold.
   Every fault is a classed condition inheriting `zucbor_error`.
-  A URL or file that cannot be opened is a `zucbor_io_error` naming the
-  cause (`HTTP status was '404 Not Found'`), with no stray warning.
 * `cbor_encode()` and `cbor_encode_seq()` write RFC 8949 core deterministic
   encoding: identical R objects give identical bytes on every platform, and
   decoding then re-encoding deterministic input reproduces it exactly.

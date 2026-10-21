@@ -12,3 +12,4 @@
 ^fuzz$
 ^\.covrignore$
 ^vignettes/articles$
+^CRAN-SUBMISSION$

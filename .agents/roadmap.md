@@ -581,7 +581,7 @@ The one refusal of Stages 0–9 that was scope rather than impossibility (§7.3,
 
 ## Stage 16 — Release 0.1.0 · S
 
-**Status:** ready to tag and submit, 2026-10-05 (#36): `NEWS.md` lists Stages 0–15, Stage 9's table covers Stages 10–15, and `cran-comments.md` is current. The soundness review before release (#47) found the encoder writing `cbor_tag()` content its own check refused, tag 0 and 1004 date text checked only in the build, and hand-built objects not re-validated; all three are fixed, with the documentation gaps it listed. `DESCRIPTION` says `0.1.0` and `NEWS.md` `# zucbor 0.1.0`. What remains is the tag, the submission and the reviewers.
+**Status:** done, 2026-10-21 (#36): 0.1.0 published on CRAN, GitHub release `0.1.0` on the submitted commit `f904184`, and `main` bumped to `0.1.0.9000` (#55). The soundness review before release (#47) found the encoder writing `cbor_tag()` content its own check refused, tag 0 and 1004 date text checked only in the build, and hand-built objects not re-validated; all three were fixed before submission, with the documentation gaps it listed.
 
 - `NEWS.md` lists every addition under one heading (it already does, Stages 0–15).
 - Stage 9's acceptance table gains rows for Stages 10–15, each naming what verifies it.

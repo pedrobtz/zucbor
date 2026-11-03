@@ -97,6 +97,22 @@ static int nudge(char *digits, int k, int *exp10, int dir)
     return 1;
 }
 
+/* "%.*e" of a into buf. On Windows arm64, R compiles with
+ * __USE_MINGW_ANSI_STDIO, so snprintf() is MinGW's own formatter, and it
+ * prints a subnormal double as if it were an x87 long double: 2^-1074 comes
+ * out as 3.3621031431120935e-4932, which is 2^-16382. long double is a plain
+ * double there, so that decoding is wrong. The UCRT's _snprintf() formats
+ * doubles exactly and is used instead. buf is ample, so _snprintf()'s
+ * missing terminator on truncation cannot arise. */
+static void format_e(char *buf, size_t size, int prec, double a)
+{
+#if defined(_WIN32) && defined(__aarch64__)
+    _snprintf(buf, size, "%.*e", prec, a);
+#else
+    snprintf(buf, size, "%.*e", prec, a);
+#endif
+}
+
 /* The fewest significant digits that read back as a (> 0, finite): the
  * shortest round-trip form. printf's correctly rounded "%.*e" can miss it at
  * a tie -- 2^-24 is exactly 5.9604644775390625e-8, and at 16 digits printf
@@ -107,7 +123,7 @@ static void shortest_digits(double a, char *digits, int *k_out, int *exp_out)
 {
     char e[40];
     for (int prec = 0; prec <= 16; prec++) {
-        snprintf(e, sizeof e, "%.*e", prec, a);
+        format_e(e, sizeof e, prec, a);
         char base[24];
         int k = 0;
         const char *p = e;

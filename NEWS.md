@@ -1,5 +1,10 @@
 # zucbor (development version)
 
+* `cbor_diagnose()` printed subnormal doubles wrongly on Windows arm64, for
+  example the smallest one as `3.3621031431120935e-4932` instead of
+  `5.0e-324`. MinGW's `snprintf()`, which R selects for compiled code there,
+  misreads them; zucbor now formats with the Windows C runtime instead.
+
 * `cbor_read()` and `cbor_read_seq()`: a URL or file that cannot be opened
   is a `zucbor_io_error` naming the cause (`HTTP status was '404 Not Found'`),
   with no stray warning (#54).

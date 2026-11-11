@@ -8,11 +8,11 @@
 #             grown corpus is cached between runs, so fuzzing accumulates:
 #             2 minutes per pull-request push, 30 minutes nightly
 on:
-  push:
-    branches: [main, master]
+  # No `push:`: a pull request already checks its merge with main,
+  # and the schedule checks main (r-actions README, "Pushes to main").
   pull_request:
   schedule:
-    - cron: "30 3 * * *"
+    - cron: "51 18 * * *"
   workflow_dispatch:
 
 name: hardening

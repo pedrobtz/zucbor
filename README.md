@@ -3,7 +3,7 @@
 <!-- badges: start -->
 [![CRAN status](https://www.r-pkg.org/badges/version/zucbor)](https://CRAN.R-project.org/package=zucbor)
 [![R-CMD-check](https://github.com/pedrobtz/zucbor/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/pedrobtz/zucbor/actions/workflows/R-CMD-check.yaml)
-[![coverage](https://raw.githubusercontent.com/pedrobtz/zucbor/main/.github/badges/coverage.svg)](https://github.com/pedrobtz/zucbor/actions/workflows/coverage.yaml)
+[![coverage](https://raw.githubusercontent.com/pedrobtz/zucbor/gh-pages/badges/coverage.svg)](https://github.com/pedrobtz/zucbor/actions/workflows/coverage.yaml)
 <!-- badges: end -->
 
 zucbor encodes and decodes CBOR (RFC 8949), the binary counterpart of
